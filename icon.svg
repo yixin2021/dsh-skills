@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="Skills">
+  <defs>
+    <linearGradient id="dsh-skills-head" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#8fb8ff"/>
+      <stop offset="1" stop-color="#5b86e0"/>
+    </linearGradient>
+    <linearGradient id="dsh-skills-handle" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#4f8ef7"/>
+      <stop offset="1" stop-color="#2f5fd0"/>
+    </linearGradient>
+  </defs>
+  <rect x="5" y="5" width="54" height="54" rx="15" fill="#132036"/>
+  <g transform="translate(32 32.5) rotate(-16) scale(3.6) translate(-7.35 -8.8)">
+    <rect x="7.3" y="6.8" width="1.7" height="7.8" rx="0.85" fill="url(#dsh-skills-handle)"/>
+    <path d="M3.4 3H11.3A1.7 1.7 0 0 1 13 4.7V5.5A1.7 1.7 0 0 1 11.3 7.2H4.8L2 6.5 3.5 5.1 1.7 4.2Z" fill="url(#dsh-skills-head)"/>
+  </g>
+</svg>

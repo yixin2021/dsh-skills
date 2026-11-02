@@ -1,0 +1,62 @@
+{
+  "name": "dsh-skills",
+  "version": "0.1.0",
+  "description": "Skills manager for DeepSeek Harness: a Skills panel in the left navigation that lists every installed Agent Skill, previews its instructions, enables or disables it without deleting it, installs one from a folder, and restores what was uninstalled.",
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "dsh-plugin",
+    "plugin",
+    "skill",
+    "skills",
+    "web-ui",
+    "sidebar"
+  ],
+  "license": "MIT",
+  "author": "ligudian",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yixin2021/dsh-skills.git"
+  },
+  "homepage": "https://github.com/yixin2021/dsh-skills#readme",
+  "bugs": {
+    "url": "https://github.com/yixin2021/dsh-skills/issues"
+  },
+  "type": "module",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "lib/skills-core.js",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "icon.svg",
+    "LICENSE",
+    "README.md",
+    "README.zh.md"
+  ],
+  "scripts": {
+    "check": "node --check index.js && node --check client.js && node --check lib/skills-core.js",
+    "test": "npm run check --silent && node --test test/"
+  },
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org/"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-client-locale"
+      ]
+    }
+  }
+}
