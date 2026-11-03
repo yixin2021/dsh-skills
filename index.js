@@ -37,6 +37,7 @@ import {
   listRoots,
   resolveWithin,
   scanRoot,
+  splitFrontmatter,
 } from './lib/skills-core.js'
 
 /** The authenticated Fetch route the Client half posts to. */
@@ -556,6 +557,7 @@ async function addCustomRoot(ctx, request) {
   }
   paths.push(path)
   await writeCustomRoots(paths)
+  skillsControl?.invalidate()
   return { ok: true, key: customRootKey(path), path }
 }
 
@@ -579,7 +581,73 @@ async function removeCustomRoot(ctx, request) {
     return { ok: false, code: 'unknown-root', message: 'That directory is not in the added list.' }
   }
   await writeCustomRoots(remaining)
+  skillsControl?.invalidate()
   return { ok: true, removed: paths.length - remaining.length }
+}
+
+/**
+ * The live skill catalog this process registered, when DSH exposes one.
+ *
+ * `invalidate` drops DSH's cached catalog, so adding or removing a directory
+ * changes the next model step without a restart.
+ */
+let skillsControl
+
+/**
+ * Describe the added directories as one DSH skill provider.
+ *
+ * DSH scans four roots of its own and no others, so without this a directory
+ * could be browsed in the panel but never used by the model. `source: 'custom'`
+ * is the label DSH already reserves for exactly this case.
+ *
+ * Candidates are deduplicated by name in add order: DSH resolves a duplicate
+ * across providers by rank, but two added directories carrying the same name
+ * must not both appear, or the catalog would be ambiguous.
+ *
+ * @param control - DSH's lifecycle and cache-invalidation handle.
+ * @returns the provider DSH reads.
+ */
+function createCustomProvider(control) {
+  skillsControl = control
+  const providerName = 'dsh-skills-custom'
+  return {
+    name: providerName,
+    async list() {
+      const paths = await readCustomRoots()
+      const candidates = []
+      const seen = new Set()
+      for (const [index, path] of paths.entries()) {
+        const scanned = await scanRoot({ key: customRootKey(path), kind: 'custom', source: 'custom', path })
+        for (const skill of scanned.skills) {
+          if (skill.disabled || seen.has(skill.name)) continue
+          seen.add(skill.name)
+          candidates.push({
+            name: skill.name,
+            description: skill.description ?? '',
+            whenToUse: skill.whenToUse,
+            invocation: { modelInvocable: skill.modelInvocable, userInvocable: skill.userInvocable },
+            source: 'custom',
+            provider: providerName,
+            path: skill.path,
+            rank: index,
+            locator: { file: skill.path, kind: skill.entryKind },
+            resourceBase: skill.entryKind === 'directory' ? { kind: 'directory', path: skill.path } : undefined,
+          })
+        }
+      }
+      return { candidates, complete: true }
+    },
+    async get(candidate) {
+      const located = candidate.locator
+      if (located === undefined || typeof located.file !== 'string') return undefined
+      const file = located.kind === 'directory' ? join(located.file, SKILL_FILE) : located.file
+      const text = await readFile(file, 'utf8').catch(() => undefined)
+      if (text === undefined) return undefined
+      const { body } = splitFrontmatter(text)
+      const { rank: _rank, locator: _locator, ...summary } = candidate
+      return { ...summary, content: body }
+    },
+  }
 }
 
 /**
@@ -686,6 +754,10 @@ export async function dispatch(ctx, body) {
  * @param ctx - Host context.
  */
 export function apply(ctx) {
+  const skills = typeof ctx.get === 'function' ? ctx.get('skills') : undefined
+  if (skills !== undefined && typeof skills.registerProvider === 'function') {
+    ctx.effect(() => skills.registerProvider((control) => createCustomProvider(control)), 'dsh-skills: provider')
+  }
   ctx.effect(
     () =>
       ctx.connection.fetch.register({
@@ -725,4 +797,5 @@ export const internals = {
   readCustomRoots,
   writeCustomRoots,
   customRootsFile,
+  createCustomProvider,
 }

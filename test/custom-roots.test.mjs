@@ -14,7 +14,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { after, before, describe, test } from 'node:test'
 
-import { dispatch } from '../index.js'
+import { apply, dispatch } from '../index.js'
 
 const SKILL = '---\nname: alpha\ndescription: Does the alpha thing.\n---\n\n# Alpha\n'
 const OTHER = '---\nname: beta\ndescription: Does the beta thing.\n---\n\n# Beta\n'
@@ -154,4 +154,58 @@ describe('added directories', () => {
       process.env.HOME = realHome
     }
   })
+
+test('DSH itself can load skills from an added directory', async () => {
+  let factory
+  const invalidations = []
+  const ctxWithSkills = {
+    get(name) {
+      if (name !== 'skills') return undefined
+      return {
+        registerProvider(create) {
+          factory = create
+          return () => {}
+        },
+      }
+    },
+    // Cordis runs an effect factory immediately; so does this stand-in.
+    effect(fn) {
+      fn()
+      return () => {}
+    },
+    connection: { fetch: { register: () => () => {} } },
+  }
+  apply(ctxWithSkills)
+  assert.equal(typeof factory, 'function', 'apply registers a provider when DSH exposes the service')
+
+  const provider = factory({ signal: new AbortController().signal, invalidate: () => invalidations.push(Date.now()) })
+  assert.equal(provider.name, 'dsh-skills-custom')
+
+  // The earlier tests left the second library listed; add the first back.
+  const added = await dispatch(ctx, { action: 'add-root', path: library })
+  assert.equal(added.ok, true)
+  assert.equal(invalidations.length, 1, 'adding a directory refreshes the catalog')
+
+  const listed = await provider.list()
+  const names = listed.candidates.map((candidate) => candidate.name).sort()
+  assert.deepEqual(names, ['alpha', 'beta'])
+  for (const candidate of listed.candidates) {
+    assert.equal(candidate.source, 'custom')
+    assert.equal(candidate.provider, 'dsh-skills-custom')
+    assert.equal(candidate.invocation.modelInvocable, true)
+  }
+
+  const alpha = listed.candidates.find((candidate) => candidate.name === 'alpha')
+  const skill = await provider.get(alpha)
+  assert.equal(skill.name, 'alpha')
+  assert.match(skill.content, /# Alpha/, 'the body is handed to the model without frontmatter')
+  assert.doesNotMatch(skill.content, /^---/, 'frontmatter is not part of the body')
+  assert.equal(skill.locator, undefined, 'the locator is not leaked into the definition')
+
+  const removed = await dispatch(ctx, { action: 'remove-root', path: library })
+  assert.equal(removed.ok, true)
+  assert.equal(invalidations.length, 2, 'removing a directory refreshes the catalog')
+  const after = await provider.list()
+  assert.deepEqual(after.candidates.map((candidate) => candidate.name), ['beta'])
+})
 })
