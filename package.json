@@ -38,7 +38,8 @@
     "icon.svg",
     "LICENSE",
     "README.md",
-    "README.zh.md"
+    "README.zh.md",
+    "docs/banner.png"
   ],
   "scripts": {
     "check": "node --check index.js && node --check client.js && node --check lib/skills-core.js",

@@ -7,9 +7,12 @@ kind: "plugin-readme"
 
 English | [中文](README.zh.md)
 
+![DSH Skills](docs/banner.png)
+
 A **技能 / Skills** row in the DeepSeek Harness left navigation, and the page it opens.
 
-> Landing page: <https://yixin2021.github.io/dsh-skills/> · Download: [v0.1.0](https://github.com/yixin2021/dsh-skills/releases/latest)
+[Install](#install) · [Download v0.1.0](https://github.com/yixin2021/dsh-skills/releases/latest) ·
+[Landing page](https://yixin2021.github.io/dsh-skills/) (`github.io` is unreachable on some networks — see below)
 
 DSH discovers Agent Skills from `.dsh/skills` and `.agents/skills` — under your
 home and under a project — but ships no surface for seeing what is installed or

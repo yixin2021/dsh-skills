@@ -7,9 +7,12 @@ kind: "plugin-readme"
 
 [English](README.md) | 中文
 
+![DSH Skills](docs/banner.png)
+
 在 DeepSeek Harness 左侧导航中加入一行 **技能**，以及点击后打开的技能管理页面。
 
-> 介绍页：<https://yixin2021.github.io/dsh-skills/> · 下载：[v0.1.0](https://github.com/yixin2021/dsh-skills/releases/latest)
+[安装](#安装) · [下载 v0.1.0](https://github.com/yixin2021/dsh-skills/releases/latest) ·
+[介绍页](https://yixin2021.github.io/dsh-skills/)（`github.io` 在部分网络中不可达，见文末）
 
 DSH 会从用户目录和项目目录下的 `.dsh/skills`、`.agents/skills` 中发现 Agent 技能，
 但本身没有提供查看已安装技能、或在不改文件的前提下临时关掉某个技能的界面。
@@ -151,6 +154,15 @@ npm test
 先对三个源文件跑 `node --check`，再在真实临时目录上跑 25 项文件系统测试：
 frontmatter 解析（引号标量、注释、块标量、非法布尔写法）、路径包含、根目录发现、
 仅扫描直接子项、以及包括各种拒绝分支在内的全部变更操作。
+
+## 关于介绍页
+
+介绍页发布在 GitHub Pages（<https://yixin2021.github.io/dsh-skills/>）。`*.github.io`
+在部分网络（含中国大陆多数网络）会被干扰：TCP 能连上，TLS 握手直接被重置，浏览器表现为
+「无法访问」。仓库本身、Releases、README 上的图片都不受影响。
+
+页面源码就在 `docs/index.html`，本地直接打开即可；要放到自己的域名下，把 `docs/` 整个
+目录丢给任意静态托管，再在该仓库 Settings → Pages 里填自定义域名（或 `docs/CNAME`）。
 
 ## 已知限制
 
