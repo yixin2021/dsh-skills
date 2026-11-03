@@ -57,8 +57,9 @@ describe('agent libraries', () => {
   test('finds each agent library that exists, and skips the ones that do not', async () => {
     const listed = await dispatch(ctx, { action: 'list' })
     const agents = listed.roots.filter((root) => root.kind === 'agent')
-    assert.deepEqual(agents.map((root) => root.agent), ['codex', 'codebuddy', 'claude', 'workbuddy'])
-    assert.deepEqual(agents.map((root) => root.skills.map((skill) => skill.name)), [['codex-skill'], ['buddy-skill'], ['claude-skill'], ['wb-skill']])
+    // Listed in the order the page shows them: codex, claude, workbuddy, codebuddy.
+    assert.deepEqual(agents.map((root) => root.agent), ['codex', 'claude', 'workbuddy', 'codebuddy'])
+    assert.deepEqual(agents.map((root) => root.skills.map((skill) => skill.name)), [['codex-skill'], ['claude-skill'], ['wb-skill'], ['buddy-skill']])
     for (const root of agents) {
       assert.equal(root.readOnly, true, 'another agent owns those bytes')
       assert.equal(root.exists, true)
@@ -76,9 +77,9 @@ describe('agent libraries', () => {
       candidates.map((entry) => entry.path),
       [
         join(process.env.CODEX_HOME, 'skills'),
-        join(process.env.CODEBUDDY_HOME, 'skills'),
         join(process.env.CLAUDE_CONFIG_DIR, 'skills'),
         join(process.env.WORKBUDDY_HOME, 'skills'),
+        join(process.env.CODEBUDDY_HOME, 'skills'),
       ],
     )
   })

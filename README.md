@@ -24,7 +24,7 @@ for turning one off without editing files. This plugin adds that surface.
 | **New skill** | Write a bundle with a valid frontmatter block from a form. |
 | **Uninstall safely** | Uninstall moves the entry to a root-local `.trash`; restore it later, or delete it for good. |
 | **Locate** | Reveal a skill or a root in Finder / Explorer / the desktop file manager. |
-| **Known libraries** | Codex, CodeBuddy and Claude Code keep their skills in well-known places; those that exist are listed automatically, each with that agent's mark. |
+| **Known libraries** | Codex, Claude Code, WorkBuddy and CodeBuddy keep their skills in well-known places; those that exist are listed automatically, each with that agent's mark. |
 | **Add a directory** | Point the panel at another agent's skill library — `~/.claude/skills`, a colleague's checkout, a shared bundle. Its skills are listed, and DSH loads them too. The directory itself stays read-only. |
 
 ## Install
@@ -82,17 +82,17 @@ backs `.trash`.
 
 ### Known agent libraries
 
-Four directories are found on their own, so a machine that already runs another
-coding agent needs no configuration:
+Five libraries are found on their own, so a machine that already runs another
+coding agent needs no configuration. This is the order the page lists them in:
 
 | Mark | Library | Path |
 |---|---|---|
-| DSH | DSH skills | `$DSH_HOME/skills` |
-| DSH | shared agent skills | `$DSH_AGENTS_HOME/skills` (usually `~/.agents/skills`) |
+| DeepSeek | DeepSeek Harness | `$DSH_HOME/skills` (usually `~/.dsh/skills`) |
+| DeepSeek | Agents | `$DSH_AGENTS_HOME/skills` (usually `~/.agents/skills`) |
 | Codex | Codex | `$CODEX_HOME/skills` (usually `~/.codex/skills`) |
-| CodeBuddy | CodeBuddy | `$CODEBUDDY_HOME/skills` (usually `~/.codebuddy/skills`) |
 | Claude Code | Claude Code | `$CLAUDE_CONFIG_DIR/skills` (usually `~/.claude/skills`) |
 | WorkBuddy | WorkBuddy | `$WORKBUDDY_HOME/skills` (usually `~/.workbuddy/skills`) |
+| CodeBuddy | CodeBuddy | `$CODEBUDDY_HOME/skills` (usually `~/.codebuddy/skills`) |
 
 Discovery runs on every read rather than being remembered, so installing
 another agent later just works, and deleting a library removes it from the

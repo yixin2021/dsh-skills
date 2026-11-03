@@ -24,7 +24,7 @@ DSH 会从用户目录和项目目录下的 `.dsh/skills`、`.agents/skills` 中
 | **新建技能** | 用表单写一个带合法 frontmatter 的技能包。 |
 | **安全卸载** | 卸载只是把条目移进根目录下的 `.trash`，之后可恢复，也可彻底删除。 |
 | **定位** | 在访达 / 资源管理器 / 桌面文件管理器中显示技能或根目录。 |
-| **自动识别** | Codex、CodeBuddy、Claude Code 的技能目录在固定位置，存在的会被自动列出，并带上各自 agent 的图标。 |
+| **自动识别** | Codex、Claude Code、WorkBuddy、CodeBuddy 的技能目录在固定位置，存在的会被自动列出，并带上各自 agent 的图标。 |
 | **添加目录** | 把另一个 agent 的技能库挂到面板上——`~/.claude/skills`、同事的仓库、共享的技能包都行。里面的技能会被列出，DSH 也会加载。目录本身仍然是只读的。 |
 
 ## 安装
@@ -78,16 +78,17 @@ DSH 只发现技能根的**直接子项**。被停用的技能会被移到 `<roo
 
 ### 自动识别的 agent 技能库
 
-有四个目录是自动找到的，已经在用别的编码 agent 的机器不需要任何配置：
+有五个目录是自动找到的，已经在用别的编码 agent 的机器不需要任何配置。页面按这个
+顺序列出：
 
 | 图标 | 技能库 | 路径 |
 |---|---|---|
-| DSH | DSH 技能 | `$DSH_HOME/skills` |
-| DSH | 共享 agent 技能 | `$DSH_AGENTS_HOME/skills`（通常是 `~/.agents/skills`） |
+| DeepSeek | DeepSeek Harness | `$DSH_HOME/skills`（通常是 `~/.dsh/skills`） |
+| DeepSeek | Agents | `$DSH_AGENTS_HOME/skills`（通常是 `~/.agents/skills`） |
 | Codex | Codex | `$CODEX_HOME/skills`（通常是 `~/.codex/skills`） |
-| CodeBuddy | CodeBuddy | `$CODEBUDDY_HOME/skills`（通常是 `~/.codebuddy/skills`） |
 | Claude Code | Claude Code | `$CLAUDE_CONFIG_DIR/skills`（通常是 `~/.claude/skills`） |
 | WorkBuddy | WorkBuddy | `$WORKBUDDY_HOME/skills`（通常是 `~/.workbuddy/skills`） |
+| CodeBuddy | CodeBuddy | `$CODEBUDDY_HOME/skills`（通常是 `~/.codebuddy/skills`） |
 
 每次读取时重新探测，而不是记住结果：以后装了别的 agent 会自动出现，删掉目录也就
 从列表里消失。这些技能库和手动添加的目录一样是只读的——那些字节不归 DSH 管。
@@ -100,7 +101,7 @@ DSH 只发现技能根的**直接子项**。被停用的技能会被移到 `<roo
 
 ### 添加的目录
 
-DSH 只扫描固定的四个根目录，所以插件自己注册了一个技能 provider
+DSH 只扫描固定的几个根目录，所以插件自己注册了一个技能 provider
 （`ctx.skills.registerProvider`），用 `source: 'custom'`——DSH 正是为这种情况留的
 标签——把这些目录里的技能交给模型。技能目录里的调用策略取自各自的 frontmatter；
 用软链接挂进来的技能包也算数（Claude Code 和 stow 都是链接而不是复制）。添加或

@@ -542,9 +542,9 @@ function agentLibraryCandidates() {
   const home = homedir()
   return [
     { agent: 'codex', path: join(process.env.CODEX_HOME || join(home, '.codex'), 'skills') },
-    { agent: 'codebuddy', path: join(process.env.CODEBUDDY_HOME || join(home, '.codebuddy'), 'skills') },
     { agent: 'claude', path: join(process.env.CLAUDE_CONFIG_DIR || join(home, '.claude'), 'skills') },
     { agent: 'workbuddy', path: join(process.env.WORKBUDDY_HOME || join(home, '.workbuddy'), 'skills') },
+    { agent: 'codebuddy', path: join(process.env.CODEBUDDY_HOME || join(home, '.codebuddy'), 'skills') },
   ]
 }
 
