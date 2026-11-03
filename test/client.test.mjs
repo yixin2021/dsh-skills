@@ -708,6 +708,9 @@ test('an agent library is named after its agent and carries that agent\'s own ma
   const svgs = elementsOf(tree).filter((element) => element.type === 'svg')
   const tiles = elementsOf(tree).filter((element) => element.props?.dangerouslySetInnerHTML !== undefined)
 
+  const counts = elementsOf(tree).filter((element) => element.props?.className === 'dsm-root-count')
+  assert.ok(counts.length >= 8, 'the skill count sits beside the name, in the card and in the tab')
+
   // Tab plus card for each of the three agent roots.
   assert.ok(svgs.length >= 4, 'vector marks for Codex and Claude Code')
   assert.equal(tiles.length, 2, 'the WorkBuddy tile is drawn in the tab and the card')

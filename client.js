@@ -496,7 +496,9 @@ window.__ModuleLoader__.load({
         '.dsm-card{display:flex;flex-direction:column;overflow:hidden;border:0.5px solid var(--dsw-alias-border-l1);border-radius:12px;background:var(--dsw-alias-bg-layer-1)}',
         '.dsm-card-head{display:flex;align-items:flex-start;gap:10px;padding:12px 14px;border-bottom:0.5px solid var(--dsw-alias-border-l1)}',
         '.dsm-card-title{display:flex;flex-direction:column;gap:2px;min-width:0;flex:1}',
-        '.dsm-card-name{font-size:13px;font-weight:600}',
+        // The mark sits inline before the name: the row is a flex line, so the
+        // gap applies between the mark, the name and any chips.
+        '.dsm-card-name{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600}',
         '.dsm-card-path{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--dsw-alias-label-secondary);font-size:11px;font-family:ui-monospace,SFMono-Regular,Consolas,monospace}',
         '.dsm-row{display:flex;align-items:center;gap:10px;padding:10px 14px;border-top:0.5px solid var(--dsw-alias-border-l1)}',
         '.dsm-row:hover{background:var(--dsw-alias-bg-layer-2)}',
@@ -1345,6 +1347,7 @@ window.__ModuleLoader__.load({
                 { className: 'dsm-card-name' },
                 root.agent !== undefined ? h(AgentIcon, { agent: root.agent, size: 15 }) : null,
                 rootLabel(root),
+                h('span', { className: 'dsm-root-count' }, root.skills.length),
                 root.kind === 'agent' ? h(Chip, { tone: 'muted' }, t('chip.auto')) : null,
                 readOnly ? h(Chip, { tone: 'muted' }, t('chip.readOnly')) : null,
               ),
