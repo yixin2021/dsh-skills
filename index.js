@@ -757,6 +757,12 @@ export function apply(ctx) {
   const skills = typeof ctx.get === 'function' ? ctx.get('skills') : undefined
   if (skills !== undefined && typeof skills.registerProvider === 'function') {
     ctx.effect(() => skills.registerProvider((control) => createCustomProvider(control)), 'dsh-skills: provider')
+  } else if (typeof ctx.inject === 'function') {
+    // The catalog service may mount after this plugin. Waiting for it keeps the
+    // added directories usable instead of silently browsing-only.
+    ctx.inject(['skills'], (scoped) => {
+      scoped.effect(() => scoped.skills.registerProvider((control) => createCustomProvider(control)), 'dsh-skills: provider')
+    })
   }
   ctx.effect(
     () =>

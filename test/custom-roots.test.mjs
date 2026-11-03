@@ -9,7 +9,7 @@
  */
 
 import assert from 'node:assert/strict'
-import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { after, before, describe, test } from 'node:test'
@@ -154,6 +154,26 @@ describe('added directories', () => {
       process.env.HOME = realHome
     }
   })
+
+test('a symlinked bundle is a skill, not an unknown entry', async () => {
+  // Claude Code and stow both link a bundle into a skills directory; readdir
+  // reports the link as neither a file nor a directory.
+  const linked = join(base, 'linked-library')
+  await mkdir(linked, { recursive: true })
+  const target = join(base, 'shared-skill')
+  await mkdir(target, { recursive: true })
+  await writeFile(join(target, 'SKILL.md'), SKILL, 'utf8')
+  await symlink(target, join(linked, 'alpha'), 'dir')
+
+  await dispatch(ctx, { action: 'add-root', path: linked })
+  const listed = await dispatch(ctx, { action: 'list' })
+  const root = listed.roots.find((entry) => entry.path === linked)
+  assert.deepEqual(root.skills.map((skill) => skill.name), ['alpha'])
+  assert.equal(root.skills[0].entryKind, 'directory')
+
+  // Leave the list as the next test expects to find it.
+  await dispatch(ctx, { action: 'remove-root', path: linked })
+})
 
 test('DSH itself can load skills from an added directory', async () => {
   let factory

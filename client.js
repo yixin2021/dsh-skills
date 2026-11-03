@@ -84,7 +84,7 @@ window.__ModuleLoader__.load({
       'addRoot.label': 'Directory path',
       'addRoot.placeholder': '~/.claude/skills',
       'addRoot.hint':
-        'The directory is listed for reading only: DSH does not scan it, so there is no switch here. Open a skill and use "Install…" to copy it into a root DSH does scan.',
+        'DSH loads skills from this directory through this plugin. The directory is not DSH-owned, so there is no switch here; use "Install…" to copy a skill into a root DSH owns.',
       'addRoot.add': 'Add',
       'install.source': 'Source',
       'install.from': 'Copied from {path}',
@@ -182,7 +182,7 @@ window.__ModuleLoader__.load({
       'addRoot.label': '目录路径',
       'addRoot.placeholder': '~/.claude/skills',
       'addRoot.hint':
-        '该目录只用于浏览：DSH 不会扫描它，所以这里没有启用/停用开关。打开某个技能后点「安装…」，即可复制到 DSH 会扫描的目录。',
+        'DSH 会通过本插件加载这里面的技能。目录不归 DSH 管，所以这里没有启用/停用开关；点技能上的「安装…」可复制到 DSH 自己的目录。',
       'addRoot.add': '添加',
       'install.source': '来源',
       'install.from': '来自 {path}',

@@ -24,7 +24,7 @@ for turning one off without editing files. This plugin adds that surface.
 | **New skill** | Write a bundle with a valid frontmatter block from a form. |
 | **Uninstall safely** | Uninstall moves the entry to a root-local `.trash`; restore it later, or delete it for good. |
 | **Locate** | Reveal a skill or a root in Finder / Explorer / the desktop file manager. |
-| **Add a directory** | Point the panel at another agent's skill library — `~/.claude/skills`, a colleague's checkout, an archive on an external disk. Added directories are read-only and can be removed from the list at any time. |
+| **Add a directory** | Point the panel at another agent's skill library — `~/.claude/skills`, a colleague's checkout, a shared bundle. Its skills are listed, and DSH loads them too. The directory itself stays read-only. |
 
 ## Install
 
@@ -80,19 +80,25 @@ backs `.trash`.
 
 ### Added directories
 
-DSH scans four roots and no others, so adding a directory cannot make DSH load
-it. What it does do is put another agent's library in front of you: the panel
-lists its skills, previews them, and copies one into a root DSH does scan.
+DSH scans four roots and no others, so the plugin registers its own skill
+provider (`ctx.skills.registerProvider`) that serves the added directories with
+`source: 'custom'` — the label DSH reserves for exactly this. The model sees
+those skills in its catalog, with the invocation policy from each frontmatter,
+and a symlinked bundle counts as a skill (Claude Code and stow both link rather
+than copy). Adding or removing a directory invalidates the catalog, so the next
+model step sees the change without a restart.
 
-Because a switch there would change nothing, an added root is **read-only**:
-no enable/disable, no uninstall, no create, and it is never offered as an
-install target. The Host enforces this too (`code: 'read-only'`), so the rule
-does not depend on the page behaving.
+The directories themselves stay **read-only** in the panel: no enable/disable,
+no uninstall, no create, and never an install target. DSH does not own those
+bytes, and a switch there would edit another tool's library. "Install…" copies
+a skill into a root DSH does own. The Host refuses mutations with
+`code: 'read-only'`, so the rule does not depend on the page behaving.
 
 The list lives in `$DSH_HOME/skills-roots.json` — beside the skills rather than
 inside a profile, so it survives a profile rebuild and is shared by the web and
 desktop apps. A malformed file is read as an empty list; adding a directory
-rewrites it.
+rewrites it. Keys are hashed from the path, so removing one directory never
+re-points another's filter.
 
 ### Scoping
 
