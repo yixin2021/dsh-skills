@@ -41,6 +41,7 @@ describe('added directories', () => {
     process.env.CODEX_HOME = join(base, 'no-codex')
     process.env.CODEBUDDY_HOME = join(base, 'no-codebuddy')
     process.env.CLAUDE_CONFIG_DIR = join(base, 'no-claude')
+    process.env.WORKBUDDY_HOME = join(base, 'no-workbuddy')
     process.env.DSH_AGENTS_HOME = join(base, 'agents')
     await mkdir(join(process.env.DSH_HOME, 'skills'), { recursive: true })
   })
@@ -51,6 +52,7 @@ describe('added directories', () => {
     delete process.env.CODEX_HOME
     delete process.env.CODEBUDDY_HOME
     delete process.env.CLAUDE_CONFIG_DIR
+    delete process.env.WORKBUDDY_HOME
     await rm(base, { recursive: true, force: true })
   })
 

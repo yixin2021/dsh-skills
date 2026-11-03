@@ -689,27 +689,39 @@ test('removing an added directory asks the Host once', async () => {
   assert.deepEqual(sent[0], { action: 'remove-root', rootKey: 'custom:0badc0de', path: '/home/u/.claude/skills' })
 })
 
-test('an agent library is named after its agent and carries that mark', async () => {
+test('an agent library is named after its agent and carries that agent\'s own mark', async () => {
   const roots = [
     { key: 'agent:codex', kind: 'agent', source: 'custom', agent: 'codex', path: '/home/u/.codex/skills', exists: true, readOnly: true, skills: [], trash: [] },
     { key: 'agent:claude', kind: 'agent', source: 'custom', agent: 'claude', path: '/home/u/.claude/skills', exists: true, readOnly: true, skills: [], trash: [] },
-    { key: 'agent:custom:0badc0de', kind: 'custom', source: 'custom', agent: 'custom', path: '/home/u/mine', exists: true, readOnly: true, skills: [], trash: [] },
+    { key: 'agent:workbuddy', kind: 'agent', source: 'custom', agent: 'workbuddy', path: '/home/u/.workbuddy/skills', exists: true, readOnly: true, skills: [], trash: [] },
+    { key: 'custom:0badc0de', kind: 'custom', source: 'custom', agent: 'custom', path: '/home/u/mine', exists: true, readOnly: true, skills: [], trash: [] },
   ]
   const app = mountClient({ roots })
   await app.settle()
   const text = app.text()
   assert.match(text, /Codex/, 'the card is named after the agent')
   assert.match(text, /Claude Code/)
+  assert.match(text, /WorkBuddy/)
   assert.match(text, /自动/, 'and says it was found rather than added')
 
-  const marks = elementsOf(app.render()).filter((element) => element.type === 'svg')
-  assert.ok(marks.length >= 4, 'one mark per tab and one per card')
-  // The Codex mark is three linked loops; the Claude mark is an asterisk.
-  const loops = marks.filter((mark) => elementsOf(mark).filter((child) => child.type === 'ellipse').length === 3)
-  assert.ok(loops.length >= 2, 'tabs and card both use the knot for Codex')
-  const spokes = marks.filter((mark) => elementsOf(mark).filter((child) => child.type === 'path').length === 4)
-  assert.ok(spokes.length >= 2, 'tabs and card both use the asterisk for Claude Code')
-  // The manually added directory has no agent mark.
-  const custom = marks.filter((mark) => mark.props?.['data-agent'] === 'custom')
-  assert.equal(custom.length, 0)
+  const tree = app.render()
+  const svgs = elementsOf(tree).filter((element) => element.type === 'svg')
+  const tiles = elementsOf(tree).filter((element) => element.props?.dangerouslySetInnerHTML !== undefined)
+
+  // Tab plus card for each of the three agent roots.
+  assert.ok(svgs.length >= 4, 'vector marks for Codex and Claude Code')
+  assert.equal(tiles.length, 2, 'the WorkBuddy tile is drawn in the tab and the card')
+
+  // The marks are the vendors' own, so the geometry is recognisable.
+  const openaiKnot = svgs.filter((svg) => (svg.props.children ?? []).some((child) => typeof child.props?.d === 'string' && child.props.d.startsWith('M9.205 8.658')))
+  assert.ok(openaiKnot.length >= 2, 'the OpenAI knot, not a drawn substitute')
+  const claudeSpark = svgs.filter((svg) => (svg.props.children ?? []).some((child) => child.props?.fill === 'currentColor' && String(child.props.d).startsWith('M4.709 15.955')))
+  assert.ok(claudeSpark.length >= 2, 'the Claude asterisk')
+  assert.equal(claudeSpark[0].props.style.color, '#D97757', 'in Anthropic orange')
+
+  // The WorkBuddy tile is the official SVG document, not a generated shape.
+  assert.ok(tiles.some((tile) => tile.props.dangerouslySetInnerHTML.__html.includes('workbuddy') || tile.props.dangerouslySetInnerHTML.__html.includes('<svg')))
+
+  // A manually added directory has no agent mark.
+  assert.equal(tiles.filter((tile) => tile.props.style?.width === '15px').length, 1, 'only the agent cards carry a tile')
 })

@@ -87,9 +87,16 @@ DSH 只发现技能根的**直接子项**。被停用的技能会被移到 `<roo
 | Codex | Codex | `$CODEX_HOME/skills`（通常是 `~/.codex/skills`） |
 | CodeBuddy | CodeBuddy | `$CODEBUDDY_HOME/skills`（通常是 `~/.codebuddy/skills`） |
 | Claude Code | Claude Code | `$CLAUDE_CONFIG_DIR/skills`（通常是 `~/.claude/skills`） |
+| WorkBuddy | WorkBuddy | `$WORKBUDDY_HOME/skills`（通常是 `~/.workbuddy/skills`） |
 
 每次读取时重新探测，而不是记住结果：以后装了别的 agent 会自动出现，删掉目录也就
 从列表里消失。这些技能库和手动添加的目录一样是只读的——那些字节不归 DSH 管。
+
+图标用的是各家公开的品牌素材，不是自己画的：DeepSeek 鲸鱼（simple-icons 的
+`deepseek.svg`）、OpenAI 绳结与 Claude 米字（`@lobehub/icons-static-svg` 的
+`openai.svg`、`claude.svg`）、以及 codebuddy.ai 和 workbuddy.cn 站点上的官方
+`logo.svg`。单色标用 `currentColor`，跟随主题；两个圆标保留各自的渐变。商标归各
+自所有，这里只用来标识技能来自哪个 agent。
 
 ### 添加的目录
 

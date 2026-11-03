@@ -92,11 +92,20 @@ coding agent needs no configuration:
 | Codex | Codex | `$CODEX_HOME/skills` (usually `~/.codex/skills`) |
 | CodeBuddy | CodeBuddy | `$CODEBUDDY_HOME/skills` (usually `~/.codebuddy/skills`) |
 | Claude Code | Claude Code | `$CLAUDE_CONFIG_DIR/skills` (usually `~/.claude/skills`) |
+| WorkBuddy | WorkBuddy | `$WORKBUDDY_HOME/skills` (usually `~/.workbuddy/skills`) |
 
 Discovery runs on every read rather than being remembered, so installing
 another agent later just works, and deleting a library removes it from the
 list. These libraries are read-only for the same reason added directories are:
 DSH does not own those bytes.
+
+The marks are the vendors' own, taken from published brand assets rather than
+drawn here: the DeepSeek whale (`deepseek.svg` from simple-icons), the OpenAI
+knot and the Claude asterisk (`openai.svg`, `claude.svg` from
+`@lobehub/icons-static-svg`), and the official `logo.svg` tiles served by
+codebuddy.ai and workbuddy.cn. The monochrome ones inherit `currentColor` so
+they follow the theme; the two tiles keep their own gradients. Brand marks
+belong to their owners and identify the directory the skills came from.
 
 ### Added directories
 
