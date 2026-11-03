@@ -9,6 +9,8 @@ kind: "plugin-readme"
 
 在 DeepSeek Harness 左侧导航中加入一行 **技能**，以及点击后打开的技能管理页面。
 
+> 介绍页：<https://yixin2021.github.io/dsh-skills/> · 下载：[v0.1.0](https://github.com/yixin2021/dsh-skills/releases/latest)
+
 DSH 会从用户目录和项目目录下的 `.dsh/skills`、`.agents/skills` 中发现 Agent 技能，
 但本身没有提供查看已安装技能、或在不改文件的前提下临时关掉某个技能的界面。
 本插件补上这块。

@@ -551,18 +551,16 @@ test('the reload button is disabled while its own read is in flight', async () =
   assert.notEqual(after.props.disabled, true, 'settled: enabled again')
 })
 
-test('the mark is the shared hammer at every size', async () => {
+test('the mark is one spark at every size', async () => {
   // One silhouette, three renderings: the sidebar glyph, the empty state and
-  // the package icon must not drift into three different hammers.
-  const head = /M3\.4 3H11\.3[^']*/.exec(TEXT)
-  assert.ok(head, 'the client defines the hammer head')
-  assert.match(TEXT, /const HAMMER = \{/, 'the geometry lives in one constant')
-  assert.match(TEXT, /transform: 'rotate\(-16 8 8\)'/, 'the sidebar glyph draws it')
-  assert.match(TEXT, /transform: 'rotate\(-16 24 24\) scale\(3\)'/, 'the empty state scales the same geometry')
+  // the package icon must not drift into three different sparks.
+  const glyph = /const SPARK = '([^']+)'/.exec(TEXT)
+  assert.ok(glyph, 'the client defines the spark path')
+  assert.equal((TEXT.match(/h\('path', \{ d: SPARK \}\)/g) ?? []).length, 2, 'the glyph and the empty state both draw it')
 
   // SOURCE is already `<package>/client.js`.
   const svg = await readFile(join(dirname(SOURCE), 'icon.svg'), 'utf8')
-  assert.ok(svg.includes(head[0]), 'icon.svg uses the panel geometry')
+  assert.ok(svg.includes(glyph[1]), 'icon.svg uses the same path')
   assert.match(svg, /aria-label="Skills"/, 'the icon keeps its accessible name')
 })
 

@@ -375,17 +375,14 @@ window.__ModuleLoader__.load({
     }
 
     /**
-     * The hammer: one silhouette at every size.
+     * The mark: a four-point spark, one silhouette at every size.
      *
      * Drawn in a 16-unit box and scaled, so the navigation glyph, the empty
-     * state and `icon.svg` cannot drift apart. The head is a wide block, the
-     * claw splits its left end, and the handle drops from the head's middle —
-     * a plain bar-and-stick reads as a letter T or a chevron instead.
+     * state and `icon.svg` cannot drift apart. The points are long and the
+     * waist is narrow, which stays readable at sixteen pixels where a shape
+     * with detail turns into a smudge.
      */
-    const HAMMER = {
-      head: 'M3.4 3H11.3A1.7 1.7 0 0 1 13 4.7V5.5A1.7 1.7 0 0 1 11.3 7.2H4.8L2 6.5 3.5 5.1 1.7 4.2Z',
-      handle: { x: 7.3, y: 6.8, width: 1.7, height: 7.8, rx: 0.85 },
-    }
+    const SPARK = 'M8 1C8.35 1 8.62 1.24 8.7 1.57L9.35 4.2A3.6 3.6 0 0 0 11.8 6.65L14.43 7.3C14.76 7.38 15 7.65 15 8C15 8.35 14.76 8.62 14.43 8.7L11.8 9.35A3.6 3.6 0 0 0 9.35 11.8L8.7 14.43C8.62 14.76 8.35 15 8 15C7.65 15 7.38 14.76 7.3 14.43L6.65 11.8A3.6 3.6 0 0 0 4.2 9.35L1.57 8.7C1.24 8.62 1 8.35 1 8C1 7.65 1.24 7.38 1.57 7.3L4.2 6.65A3.6 3.6 0 0 0 6.65 4.2L7.3 1.57C7.38 1.24 7.65 1 8 1Z'
 
     /** The navigation glyph. */
     function SkillsGlyph({ size = 16 }) {
@@ -400,7 +397,7 @@ window.__ModuleLoader__.load({
           focusable: 'false',
           style: { display: 'block' },
         },
-        h('g', { transform: 'rotate(-16 8 8)' }, h('path', { d: HAMMER.head }), h('rect', HAMMER.handle)),
+        h('path', { d: SPARK }),
       )
     }
 
@@ -409,7 +406,7 @@ window.__ModuleLoader__.load({
       return h(
         'svg',
         {
-          viewBox: '0 0 48 48',
+          viewBox: '0 0 16 16',
           width: size,
           height: size,
           fill: 'currentColor',
@@ -417,12 +414,7 @@ window.__ModuleLoader__.load({
           focusable: 'false',
           style: { display: 'block' },
         },
-        h(
-          'g',
-          { transform: 'rotate(-16 24 24) scale(3)' },
-          h('path', { d: HAMMER.head }),
-          h('rect', HAMMER.handle),
-        ),
+        h('path', { d: SPARK }),
       )
     }
 

@@ -1,6 +1,6 @@
 {
   "name": "dsh-skills",
-  "version": "0.5.2",
+  "version": "0.1.0",
   "description": "Skills manager for DeepSeek Harness: a Skills panel in the left navigation that lists every installed Agent Skill, previews its instructions, enables or disables it without deleting it, installs one from a folder, and restores what was uninstalled.",
   "keywords": [
     "deepseek-harness",
