@@ -75,6 +75,11 @@ window.__ModuleLoader__.load({
       'root.dsh': 'Personal · ~/.dsh/skills',
       'root.agents': 'Agents · ~/.agents/skills',
       'root.custom': 'Added · {name}',
+      'agent.dsh': 'DSH',
+      'agent.codex': 'Codex',
+      'agent.codebuddy': 'CodeBuddy',
+      'agent.claude': 'Claude Code',
+      'chip.auto': 'Auto',
       'chip.readOnly': 'Read only',
       'action.addRoot': 'Add directory',
       'action.remove': 'Remove',
@@ -173,6 +178,11 @@ window.__ModuleLoader__.load({
       'root.dsh': '个人 · ~/.dsh/skills',
       'root.agents': 'Agents · ~/.agents/skills',
       'root.custom': '自定义 · {name}',
+      'agent.dsh': 'DSH',
+      'agent.codex': 'Codex',
+      'agent.codebuddy': 'CodeBuddy',
+      'agent.claude': 'Claude Code',
+      'chip.auto': '自动',
       'chip.readOnly': '只读',
       'action.addRoot': '添加目录',
       'action.remove': '移除',
@@ -954,8 +964,65 @@ window.__ModuleLoader__.load({
         )
       }
 
+      /**
+       * One agent's mark.
+       *
+       * These are shapes, not imported logos: at 16px a mark has to survive
+       * being two strokes wide, so each one is the simplest outline that reads
+       * as that agent at a glance, drawn in `currentColor` so the theme decides
+       * the tone.
+       *
+       * @param props - `agent` id and an optional size in pixels.
+       */
+      function AgentIcon({ agent, size }) {
+        const box = size ?? 14
+        const common = {
+          viewBox: '0 0 16 16',
+          width: box,
+          height: box,
+          'aria-hidden': 'true',
+          focusable: 'false',
+          fill: 'none',
+          stroke: 'currentColor',
+          strokeWidth: '1.4',
+          strokeLinecap: 'round',
+          strokeLinejoin: 'round',
+          style: { flex: 'none', display: 'block' },
+        }
+        if (agent === 'claude') {
+          // The asterisk: eight spokes from one centre.
+          return h('svg', common, h('path', { key: 'v', d: 'M8 2.4v11.2' }), h('path', { key: 'h', d: 'M2.4 8h11.2' }), h('path', { key: 'a', d: 'M4.1 4.1l7.8 7.8' }), h('path', { key: 'b', d: 'M11.9 4.1l-7.8 7.8' }))
+        }
+        if (agent === 'codex') {
+          // Three linked loops, the shape of the knot, without its detail.
+          return h(
+            'svg',
+            common,
+            h('ellipse', { key: '0', cx: 8, cy: 8, rx: 4.6, ry: 2.5 }),
+            h('ellipse', { key: '1', cx: 8, cy: 8, rx: 4.6, ry: 2.5, transform: 'rotate(60 8 8)' }),
+            h('ellipse', { key: '2', cx: 8, cy: 8, rx: 4.6, ry: 2.5, transform: 'rotate(120 8 8)' }),
+          )
+        }
+        if (agent === 'codebuddy') {
+          // A speech bubble, because that is what the product is.
+          return h(
+            'svg',
+            common,
+            h('path', { key: 'b', d: 'M3.4 3.2h9.2a1.7 1.7 0 0 1 1.7 1.7v4.3a1.7 1.7 0 0 1-1.7 1.7H7.2L4.3 13.4v-2.5H3.4a1.7 1.7 0 0 1-1.7-1.7V4.9a1.7 1.7 0 0 1 1.7-1.7z' }),
+            h('circle', { key: 'd0', cx: 5.6, cy: 7.1, r: 0.62, fill: 'currentColor', stroke: 'none' }),
+            h('circle', { key: 'd1', cx: 8, cy: 7.1, r: 0.62, fill: 'currentColor', stroke: 'none' }),
+            h('circle', { key: 'd2', cx: 10.4, cy: 7.1, r: 0.62, fill: 'currentColor', stroke: 'none' }),
+          )
+        }
+        // DSH: a prompt and a cursor.
+        return h('svg', common, h('path', { key: 'p', d: 'M3.4 4.6L6.8 8l-3.4 3.4' }), h('path', { key: 'u', d: 'M8.4 11.4h4.2' }))
+      }
+
       /** @returns the readable name of one root. */
       function rootLabel(root) {
+        if (root.agent !== undefined && root.agent !== 'custom' && root.kind === 'agent') {
+          return t(`agent.${root.agent}`)
+        }
         if (root.kind === 'custom') {
           const name = String(root.path ?? '').split('/').filter(Boolean).pop() || root.path
           return fill(t('root.custom'), { name })
@@ -1273,7 +1340,14 @@ window.__ModuleLoader__.load({
             h(
               'div',
               { className: 'dsm-card-title' },
-              h('span', { className: 'dsm-card-name' }, rootLabel(root), readOnly ? h(Chip, { tone: 'muted' }, t('chip.readOnly')) : null),
+              h(
+                'span',
+                { className: 'dsm-card-name' },
+                root.agent !== undefined ? h(AgentIcon, { agent: root.agent, size: 15 }) : null,
+                rootLabel(root),
+                root.kind === 'agent' ? h(Chip, { tone: 'muted' }, t('chip.auto')) : null,
+                readOnly ? h(Chip, { tone: 'muted' }, t('chip.readOnly')) : null,
+              ),
               h('span', { className: 'dsm-card-path', title: root.path }, root.path),
             ),
             h(Action, { onClick: () => store.reveal(root.key, undefined) }, t('action.revealFolder')),
@@ -1479,6 +1553,7 @@ window.__ModuleLoader__.load({
                       'aria-pressed': state.rootFilter === root.key,
                       onClick: () => store.setRootFilter(root.key),
                     },
+                    root.agent !== undefined ? h(AgentIcon, { agent: root.agent, size: 13 }) : null,
                     rootLabel(root),
                     h('span', { className: 'dsm-root-count' }, String(root.skills?.length ?? 0)),
                   ),

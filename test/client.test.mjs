@@ -688,3 +688,28 @@ test('removing an added directory asks the Host once', async () => {
   const sent = app.calls.slice(before).map((call) => JSON.parse(call.init.body))
   assert.deepEqual(sent[0], { action: 'remove-root', rootKey: 'custom:0badc0de', path: '/home/u/.claude/skills' })
 })
+
+test('an agent library is named after its agent and carries that mark', async () => {
+  const roots = [
+    { key: 'agent:codex', kind: 'agent', source: 'custom', agent: 'codex', path: '/home/u/.codex/skills', exists: true, readOnly: true, skills: [], trash: [] },
+    { key: 'agent:claude', kind: 'agent', source: 'custom', agent: 'claude', path: '/home/u/.claude/skills', exists: true, readOnly: true, skills: [], trash: [] },
+    { key: 'agent:custom:0badc0de', kind: 'custom', source: 'custom', agent: 'custom', path: '/home/u/mine', exists: true, readOnly: true, skills: [], trash: [] },
+  ]
+  const app = mountClient({ roots })
+  await app.settle()
+  const text = app.text()
+  assert.match(text, /Codex/, 'the card is named after the agent')
+  assert.match(text, /Claude Code/)
+  assert.match(text, /自动/, 'and says it was found rather than added')
+
+  const marks = elementsOf(app.render()).filter((element) => element.type === 'svg')
+  assert.ok(marks.length >= 4, 'one mark per tab and one per card')
+  // The Codex mark is three linked loops; the Claude mark is an asterisk.
+  const loops = marks.filter((mark) => elementsOf(mark).filter((child) => child.type === 'ellipse').length === 3)
+  assert.ok(loops.length >= 2, 'tabs and card both use the knot for Codex')
+  const spokes = marks.filter((mark) => elementsOf(mark).filter((child) => child.type === 'path').length === 4)
+  assert.ok(spokes.length >= 2, 'tabs and card both use the asterisk for Claude Code')
+  // The manually added directory has no agent mark.
+  const custom = marks.filter((mark) => mark.props?.['data-agent'] === 'custom')
+  assert.equal(custom.length, 0)
+})

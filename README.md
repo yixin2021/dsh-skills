@@ -24,6 +24,7 @@ for turning one off without editing files. This plugin adds that surface.
 | **New skill** | Write a bundle with a valid frontmatter block from a form. |
 | **Uninstall safely** | Uninstall moves the entry to a root-local `.trash`; restore it later, or delete it for good. |
 | **Locate** | Reveal a skill or a root in Finder / Explorer / the desktop file manager. |
+| **Known libraries** | Codex, CodeBuddy and Claude Code keep their skills in well-known places; those that exist are listed automatically, each with that agent's mark. |
 | **Add a directory** | Point the panel at another agent's skill library — `~/.claude/skills`, a colleague's checkout, a shared bundle. Its skills are listed, and DSH loads them too. The directory itself stays read-only. |
 
 ## Install
@@ -61,7 +62,8 @@ the navigation row and the panel. Reload the window after installing.
 **Host half** (`index.js`) registers one authenticated JSON route,
 `POST /api/dsh-skills`, on `ctx.connection.fetch`. It answers `list`, `read`,
 `set-disabled`, `trash`, `restore`, `purge`, `empty-trash`, `create`,
-`import-directory`, `import-files`, `reveal`, `add-root` and `remove-root`. `lib/skills-core.js` owns the
+`import-directory`, `import-files`, `reveal`, `add-root` and `remove-root`. `ctx.skills.registerProvider` publishes the
+discovered libraries and the added directories to the model. `lib/skills-core.js` owns the
 skill grammar — frontmatter parsing, root discovery, entry scanning — so the
 route and the tests agree on what a skill is.
 
@@ -77,6 +79,24 @@ to `<root>/.disabled/<name>` — hidden, therefore invisible to every provider �
 and moved back untouched when re-enabled. Nothing in `SKILL.md` is rewritten,
 so a hand-written skill survives a round trip byte for byte. The same trick
 backs `.trash`.
+
+### Known agent libraries
+
+Four directories are found on their own, so a machine that already runs another
+coding agent needs no configuration:
+
+| Mark | Library | Path |
+|---|---|---|
+| DSH | DSH skills | `$DSH_HOME/skills` |
+| DSH | shared agent skills | `$DSH_AGENTS_HOME/skills` (usually `~/.agents/skills`) |
+| Codex | Codex | `$CODEX_HOME/skills` (usually `~/.codex/skills`) |
+| CodeBuddy | CodeBuddy | `$CODEBUDDY_HOME/skills` (usually `~/.codebuddy/skills`) |
+| Claude Code | Claude Code | `$CLAUDE_CONFIG_DIR/skills` (usually `~/.claude/skills`) |
+
+Discovery runs on every read rather than being remembered, so installing
+another agent later just works, and deleting a library removes it from the
+list. These libraries are read-only for the same reason added directories are:
+DSH does not own those bytes.
 
 ### Added directories
 

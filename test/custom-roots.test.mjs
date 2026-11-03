@@ -37,6 +37,10 @@ describe('added directories', () => {
     await mkdir(join(second, 'beta'), { recursive: true })
     await writeFile(join(second, 'beta', 'SKILL.md'), OTHER, 'utf8')
     process.env.DSH_HOME = join(base, 'home')
+    // The machine's real agent libraries must not leak into these tests.
+    process.env.CODEX_HOME = join(base, 'no-codex')
+    process.env.CODEBUDDY_HOME = join(base, 'no-codebuddy')
+    process.env.CLAUDE_CONFIG_DIR = join(base, 'no-claude')
     process.env.DSH_AGENTS_HOME = join(base, 'agents')
     await mkdir(join(process.env.DSH_HOME, 'skills'), { recursive: true })
   })
@@ -44,6 +48,9 @@ describe('added directories', () => {
   after(async () => {
     delete process.env.DSH_HOME
     delete process.env.DSH_AGENTS_HOME
+    delete process.env.CODEX_HOME
+    delete process.env.CODEBUDDY_HOME
+    delete process.env.CLAUDE_CONFIG_DIR
     await rm(base, { recursive: true, force: true })
   })
 

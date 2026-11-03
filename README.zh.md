@@ -24,6 +24,7 @@ DSH 会从用户目录和项目目录下的 `.dsh/skills`、`.agents/skills` 中
 | **新建技能** | 用表单写一个带合法 frontmatter 的技能包。 |
 | **安全卸载** | 卸载只是把条目移进根目录下的 `.trash`，之后可恢复，也可彻底删除。 |
 | **定位** | 在访达 / 资源管理器 / 桌面文件管理器中显示技能或根目录。 |
+| **自动识别** | Codex、CodeBuddy、Claude Code 的技能目录在固定位置，存在的会被自动列出，并带上各自 agent 的图标。 |
 | **添加目录** | 把另一个 agent 的技能库挂到面板上——`~/.claude/skills`、同事的仓库、共享的技能包都行。里面的技能会被列出，DSH 也会加载。目录本身仍然是只读的。 |
 
 ## 安装
@@ -60,7 +61,8 @@ bundle patch 会插入一个名为 `skills` 的 Loader 行；客户端部分负�
 **宿主侧**（`index.js`）在 `ctx.connection.fetch` 上注册一个需要鉴权的 JSON 路由
 `POST /api/dsh-skills`，处理 `list`、`read`、`set-disabled`、`trash`、`restore`、
 `purge`、`empty-trash`、`create`、`import-directory`、`import-files`、`reveal`、
-`add-root`、`remove-root`。
+`add-root`、`remove-root`；并通过 `ctx.skills.registerProvider` 把自动识别的技能库
+和手动添加的目录交给模型。
 `lib/skills-core.js` 负责技能语法本身——frontmatter 解析、根目录发现、条目扫描——
 路由和测试因此共用同一套「什么算一个技能」的定义。
 
@@ -73,6 +75,21 @@ bundle patch 会插入一个名为 `skills` 的 Loader 行；客户端部分负�
 DSH 只发现技能根的**直接子项**。被停用的技能会被移到 `<root>/.disabled/<name>`——
 隐藏、因此对所有 provider 不可见——重新启用时原样移回。`SKILL.md` 一个字节都不会被改写，
 手写的技能可以完整往返。`.trash` 用的是同一套办法。
+
+### 自动识别的 agent 技能库
+
+有四个目录是自动找到的，已经在用别的编码 agent 的机器不需要任何配置：
+
+| 图标 | 技能库 | 路径 |
+|---|---|---|
+| DSH | DSH 技能 | `$DSH_HOME/skills` |
+| DSH | 共享 agent 技能 | `$DSH_AGENTS_HOME/skills`（通常是 `~/.agents/skills`） |
+| Codex | Codex | `$CODEX_HOME/skills`（通常是 `~/.codex/skills`） |
+| CodeBuddy | CodeBuddy | `$CODEBUDDY_HOME/skills`（通常是 `~/.codebuddy/skills`） |
+| Claude Code | Claude Code | `$CLAUDE_CONFIG_DIR/skills`（通常是 `~/.claude/skills`） |
+
+每次读取时重新探测，而不是记住结果：以后装了别的 agent 会自动出现，删掉目录也就
+从列表里消失。这些技能库和手动添加的目录一样是只读的——那些字节不归 DSH 管。
 
 ### 添加的目录
 

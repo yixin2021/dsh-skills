@@ -164,6 +164,7 @@ async function findRoot(ctx, key) {
     agentsHome: agentsHome(),
     workspaces: workspaceList(ctx),
     customPaths: await readCustomRoots(),
+    agentPaths: await discoverAgentLibraries(),
   })
   const known = roots.find((root) => root.key === key)
   if (known !== undefined) return known
@@ -526,6 +527,54 @@ function revealPath(path) {
   })
 }
 
+
+/**
+ * The skill directories the other coding agents on this machine keep.
+ *
+ * These are well-known locations, not guesses: Codex, CodeBuddy and Claude
+ * Code each use one, and each honours an environment variable to move it.
+ * Discovery happens on every read, so installing one of those agents later
+ * needs no configuration here, and deleting a library removes it from the list.
+ *
+ * @returns candidate `{ agent, path }` pairs, whether or not they exist.
+ */
+function agentLibraryCandidates() {
+  const home = homedir()
+  return [
+    { agent: 'codex', path: join(process.env.CODEX_HOME || join(home, '.codex'), 'skills') },
+    { agent: 'codebuddy', path: join(process.env.CODEBUDDY_HOME || join(home, '.codebuddy'), 'skills') },
+    { agent: 'claude', path: join(process.env.CLAUDE_CONFIG_DIR || join(home, '.claude'), 'skills') },
+  ]
+}
+
+/**
+ * The agent libraries that exist right now.
+ * @returns `{ agent, path }` pairs, in a stable order.
+ */
+async function discoverAgentLibraries() {
+  const found = []
+  const seen = new Set()
+  for (const candidate of agentLibraryCandidates()) {
+    if (seen.has(candidate.path)) continue
+    seen.add(candidate.path)
+    const info = await stat(candidate.path).catch(() => undefined)
+    if (info === undefined || !info.isDirectory()) continue
+    found.push(candidate)
+  }
+  return found
+}
+
+/**
+ * Every root beyond the four DSH scans itself: the discovered agent libraries
+ * and the directories a person added. Both are read-only in the same way.
+ *
+ * @returns `{ agent, path }` pairs.
+ */
+async function extraRoots() {
+  const manual = (await readCustomRoots()).map((path) => ({ agent: 'custom', path }))
+  return [...(await discoverAgentLibraries()), ...manual]
+}
+
 /**
  * Add one directory to the list of extra roots.
  *
@@ -547,6 +596,10 @@ async function addCustomRoot(ctx, request) {
   const managed = await listRoots({ dshHome: dshHome(), agentsHome: agentsHome(), workspaces: workspaceList(ctx) })
   if (managed.some((root) => root.path === path)) {
     return { ok: false, code: 'duplicate', message: `${path} is already listed.` }
+  }
+  const discovered = await discoverAgentLibraries()
+  if (discovered.some((root) => root.path === path)) {
+    return { ok: false, code: 'duplicate', message: `${path} is found automatically and is already listed.` }
   }
   const paths = await readCustomRoots()
   if (paths.includes(path)) {
@@ -613,11 +666,11 @@ function createCustomProvider(control) {
   return {
     name: providerName,
     async list() {
-      const paths = await readCustomRoots()
+      const paths = await extraRoots()
       const candidates = []
       const seen = new Set()
-      for (const [index, path] of paths.entries()) {
-        const scanned = await scanRoot({ key: customRootKey(path), kind: 'custom', source: 'custom', path })
+      for (const [index, entry] of paths.entries()) {
+        const scanned = await scanRoot({ key: customRootKey(entry.path), kind: 'custom', source: 'custom', path: entry.path })
         for (const skill of scanned.skills) {
           if (skill.disabled || seen.has(skill.name)) continue
           seen.add(skill.name)
@@ -662,6 +715,7 @@ async function listEverything(ctx) {
     agentsHome: agentsHome(),
     workspaces,
     customPaths: await readCustomRoots(),
+    agentPaths: await discoverAgentLibraries(),
   })
   const answers = []
   const warnings = []
@@ -690,6 +744,7 @@ async function listEverything(ctx) {
       key: root.key,
       kind: root.kind,
       source: root.source,
+      agent: root.agent,
       path: root.path,
       workspacePath: root.workspacePath,
       workspaceTitle: root.workspaceTitle,
@@ -804,4 +859,7 @@ export const internals = {
   writeCustomRoots,
   customRootsFile,
   createCustomProvider,
+  agentLibraryCandidates,
+  discoverAgentLibraries,
+  extraRoots,
 }
