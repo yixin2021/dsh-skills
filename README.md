@@ -26,6 +26,7 @@ for turning one off without editing files. This plugin adds that surface.
 | **Preview** | The full `SKILL.md`, frontmatter and body, without leaving the app. |
 | **Enable / disable** | A switch per skill. Disabled skills keep their bytes and stay on disk. |
 | **Install** | Copy a folder that has `SKILL.md` at its top level into the root you pick. The original is never moved. |
+| **Import from GitHub** | Paste a GitHub repository, tree, or skill link. One repository can contribute several skills in one batch; conflicts and oversized bundles reject the whole batch without overwriting. |
 | **New skill** | Write a bundle with a valid frontmatter block from a form. |
 | **Uninstall safely** | Uninstall moves the entry to a root-local `.trash`; restore it later, or delete it for good. |
 | **Locate** | Reveal a skill or a root in Finder / Explorer / the desktop file manager. |
@@ -67,7 +68,8 @@ the navigation row and the panel. Reload the window after installing.
 **Host half** (`index.js`) registers one authenticated JSON route,
 `POST /api/dsh-skills`, on `ctx.connection.fetch`. It answers `list`, `read`,
 `set-disabled`, `trash`, `restore`, `purge`, `empty-trash`, `create`,
-`import-directory`, `import-files`, `reveal`, `add-root` and `remove-root`. `ctx.skills.registerProvider` publishes the
+`import-directory`, `import-files`, `install-from-remote`, `reveal`, `add-root`
+and `remove-root`. `ctx.skills.registerProvider` publishes the
 discovered libraries and the added directories to the model. `lib/skills-core.js` owns the
 skill grammar — frontmatter parsing, root discovery, entry scanning — so the
 route and the tests agree on what a skill is.
@@ -76,6 +78,57 @@ route and the tests agree on what a skill is.
 `dsh-skills` and the `main` panel keyed by that same id, which is how the layout
 addresses a panel. It never reads a skill root itself: every fact arrives
 through the route, so the browser has no filesystem authority.
+
+### Importing from GitHub
+
+A skill that lives in a GitHub repository is one directory bundle: `<dir>/SKILL.md`
+plus whatever it references. Paste a GitHub link and the panel reads the archive,
+shows the skills it finds, and lets you select one or several for a single import.
+The Host validates every selected bundle before writing any of them: an existing
+name, an invalid path, or a size/file-count limit rejects the whole batch without
+overwriting or leaving a partial install.
+
+| Link | How it is read |
+|---|---|
+| `https://github.com/owner/repo` | The archive service — one request, no rate limit. |
+| `https://github.com/owner/repo/tree/main/skills/foo` | The same, narrowed to that directory. |
+| `https://gitlab.com/owner/repo/-/tree/main/skills/foo` | Cloned, then narrowed. |
+| `https://gitee.com/owner/repo/tree/main/skills/foo` | Cloned, then narrowed. |
+| `git@host:owner/repo.git` | Cloned over SSH. |
+| `https://host/owner/repo.git#branch` | Cloned at that branch. |
+
+GitHub has an archive endpoint that answers with the whole tree in one request
+and no rate limit, so it is read that way; every other git host is cloned,
+shallowly, into a temporary directory that is deleted as soon as the tree has
+been read. Both paths end in the same tree, and `lib/skill-tree.js` owns the
+policy both obey: which directory holds a `SKILL.md`, which files belong to it,
+and which paths may become a file name.
+
+A repository that holds several skills is a catalogue. The dialog shows checkboxes,
+starts with all visible candidates selected, and supports selecting or clearing
+all. If more than 40 candidates are found, the dialog reports the total and
+suggests narrowing the GitHub link to a subdirectory. A branch whose name
+contains a slash (`release/2.0`) is resolved by trying the possible branch/path
+splits until the requested directory is found.
+
+**A private repository** needs an access token. The dialog has a field for one,
+and it is optional: a public repository never carries a token, so none is sent.
+The token is used for that one download and is never written to disk. For a git
+clone it travels in the child's environment rather than in the command line,
+where every process on the machine could read it.
+
+**The transport is restricted.** `git` understands transports beyond HTTP and
+SSH, and some of them run commands — `ext::` executes a shell command, and
+`file://` reads the machine's own disk. A pasted link must never reach either,
+so the URL is checked against an allowlist (`https`, `http`, `ssh`, `git`) before
+`git` sees it, a local path is refused as "not a remote repository", and
+`GIT_ALLOW_PROTOCOL` narrows it again inside the child process. The clone is
+also told not to prompt: a credential prompt in a background panel is a hang
+nobody can answer.
+
+Nothing inside a repository is executed. The archive is unpacked in memory,
+the clone is read as files, symlinks are skipped rather than followed, and
+every path is resegmented before it becomes a file name.
 
 ### Disabling without deleting
 
@@ -139,7 +192,9 @@ re-points another's filter.
 All writes go through `resolveWithin`, which refuses a path that leaves its
 root. Skill names match `^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`; a requested entry
 must already exist where the request claims it does; a create or install
-refuses to overwrite an existing enabled, disabled or trashed entry.
+refuses to overwrite an existing enabled, disabled or trashed entry. A remote
+import obeys the same rules: its paths are resegmented before they become file
+names, and a symlink inside a repository is skipped rather than followed.
 
 ## UI conventions
 
@@ -168,10 +223,12 @@ refuses to overwrite an existing enabled, disabled or trashed entry.
 npm test
 ```
 
-Runs `node --check` on all three sources, then 25 filesystem tests over a real
-temporary tree: frontmatter parsing (quoted scalars, comments, block scalars,
-invalid flag spellings), path containment, root discovery, direct-children-only
-scanning, and every mutation including the refusals.
+Runs `node --check` on all seven sources, then 90 tests over a real temporary
+tree and over fixtures built in the test itself: frontmatter parsing (quoted
+scalars, comments, block scalars, invalid flag spellings), path containment,
+root discovery, direct-children-only scanning, and every mutation including
+the refusals — plus the remote path: link parsing, the transport allowlist, the
+tar reader, and the clone.
 
 ## Known limits
 
@@ -181,3 +238,7 @@ scanning, and every mutation including the refusals.
   would not load it either.
 - The panel shows what a root holds now; it does not watch the filesystem, so
   use the reload control after editing files on disk.
+- A remote import needs either `git` on the machine (for every host but
+  GitHub) or a link to a GitHub repository.
+- A repository is read whole; a very large one costs one download or one
+  shallow clone, and archives beyond 24 MB are refused rather than downloaded.

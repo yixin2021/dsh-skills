@@ -20,6 +20,8 @@ import { cp, mkdir, rename, rm, readdir, readFile, stat, writeFile } from 'node:
 import { homedir } from 'node:os'
 import { basename, dirname, join } from 'node:path'
 
+import { parseRemoteUrl, readRemoteTree } from './lib/remote-source.js'
+import { MAX_CANDIDATES, collectSkillFilesDetailed, findSkillCandidates } from './lib/skill-tree.js'
 import {
   DISABLED_DIR,
   MAX_CUSTOM_ROOTS,
@@ -511,6 +513,212 @@ async function importFiles(ctx, request) {
 }
 
 /**
+ * Name the directory a skill is written into.
+ *
+ * The frontmatter name wins when it is a name on disk; otherwise the directory
+ * carries the name, and a frontmatter title like "PDF Processing" becomes its
+ * slug so the install still lands somewhere addressable.
+ *
+ * @param candidate - the chosen skill directory.
+ * @param requested - a name the person typed, if any.
+ * @returns a name DSH accepts, or undefined.
+ */
+function pickEntryName(candidate, requested) {
+  const typed = typeof requested === 'string' ? requested.trim() : ''
+  if (typed.length > 0) return isSkillName(typed) ? typed : undefined
+  if (candidate.name !== undefined && isSkillName(candidate.name)) return candidate.name
+  const slug = String(candidate.name ?? '')
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+  if (slug.length > 0 && isSkillName(slug)) return slug
+  const leaf = candidate.path.split('/').filter((segment) => segment.length > 0).pop()
+  return leaf !== undefined && isSkillName(leaf) ? leaf : undefined
+}
+
+/**
+ * The link a person can open to see what was installed.
+ *
+ * @param spec - the parsed link.
+ * @param ref - the branch that was actually read.
+ * @param path - the directory inside the repository.
+ * @returns the link.
+ */
+function sourceLink(spec, ref, path) {
+  if (spec.kind === 'github') {
+    const base = `https://github.com/${spec.owner}/${spec.repo}`
+    // A repository read at its default branch has no branch name, but GitHub
+    // resolves HEAD in a tree link, so the link still opens the directory.
+    const branch = `/tree/${ref ?? 'HEAD'}`
+    const directory = path.length === 0 ? '' : `/${path}`
+    return `${base}${branch}${directory}`
+  }
+  return `${spec.url}${ref === undefined ? '' : `#${ref}`}`
+}
+
+/**
+ * Install a skill straight out of a remote repository.
+ *
+ * One read fetches the repository — an archive for GitHub, a shallow clone for
+ * every other git host — and the skill is written from what it holds. Nothing
+ * from the repository is ever executed, and every path is resegmented before
+ * it becomes a file name.
+ *
+ * A repository with several skills answers `choose-skill` and the page asks
+ * which one, which is the difference between installing a skill and installing
+ * a catalogue.
+ *
+ * @param ctx - Host context.
+ * @param request - target root, the link, and the directory once chosen.
+ * @returns the installed entry, a list to choose from, or a typed failure.
+ */
+async function installFromRemote(ctx, request) {
+  const guard = await writableRoot(ctx, request.rootKey)
+  if (guard.error !== undefined) return guard.error
+  const root = guard.root
+  const spec = parseRemoteUrl(request.url)
+  if (spec === undefined) {
+    return { ok: false, code: 'bad-url', message: 'That is not a link to a remote repository.' }
+  }
+
+  let tree
+  try {
+    tree = await readRemoteTree(spec, {
+      fetchImpl: request.fetchImpl,
+      execImpl: request.execImpl,
+      token: request.token,
+    })
+  } catch (error) {
+    return {
+      ok: false,
+      code: typeof error?.code === 'string' ? error.code : 'fetch-failed',
+      message: error instanceof Error ? error.message : String(error),
+    }
+  }
+
+  const candidates = findSkillCandidates(tree.files)
+  if (candidates.length === 0) {
+    return {
+      ok: false,
+      code: 'not-a-skill',
+      message: `That GitHub repository has no ${SKILL_FILE} in it, so there is nothing to import.`,
+    }
+  }
+  const sourcePath = typeof tree.path === 'string' ? tree.path : ''
+  const scopedCandidates = sourcePath.length === 0
+    ? candidates
+    : candidates.filter((candidate) => candidate.path === sourcePath || candidate.path.startsWith(`${sourcePath}/`))
+  if (scopedCandidates.length === 0) {
+    return { ok: false, code: 'path-not-found', message: `GitHub does not contain a skill at "${sourcePath}".` }
+  }
+
+  const wanted = typeof request.path === 'string' ? request.path : sourcePath
+  let chosen
+  if (Array.isArray(request.paths)) {
+    const paths = request.paths.filter((path) => typeof path === 'string')
+    if (paths.length === 0 || paths.length !== request.paths.length || new Set(paths).size !== paths.length) {
+      return { ok: false, code: 'bad-request', message: 'Select at least one different skill.' }
+    }
+    chosen = paths.map((path) => scopedCandidates.find((candidate) => candidate.path === path))
+    if (chosen.some((candidate) => candidate === undefined)) {
+      return { ok: false, code: 'bad-request', message: 'One of the selected skills is not in that GitHub link.' }
+    }
+  } else {
+    const one = typeof wanted === 'string' ? scopedCandidates.find((candidate) => candidate.path === wanted) : undefined
+    if (one !== undefined) chosen = [one]
+    else if (scopedCandidates.length > 1) {
+      return {
+        ok: false,
+        code: 'choose-skill',
+        message: 'Select one or more skills to import.',
+        candidates: scopedCandidates.slice(0, MAX_CANDIDATES).map((candidate) => ({
+          path: candidate.path,
+          name: candidate.name,
+          description: candidate.description,
+        })),
+        total: scopedCandidates.length,
+        truncated: scopedCandidates.length > MAX_CANDIDATES,
+        source: { url: spec.url, ref: tree.ref },
+      }
+    } else {
+      chosen = [scopedCandidates[0]]
+    }
+  }
+
+  const installs = []
+  const names = new Set()
+  for (const candidate of chosen) {
+    const name = pickEntryName(candidate, request.name)
+    if (name === undefined) {
+      return { ok: false, code: 'bad-name', message: `"${candidate.name}" is not a name DSH can use as a directory.` }
+    }
+    if (names.has(name)) {
+      return { ok: false, code: 'conflict', message: `Several selected skills would be installed as "${name}".` }
+    }
+    names.add(name)
+
+    const locations = entryLocations(root.path, name)
+    const taken = await firstExisting([locations.enabled, locations.disabled, join(root.path, TRASH_DIR, name)])
+    if (taken !== undefined) return { ok: false, code: 'conflict', message: `"${name}" already exists in this root.` }
+
+    const collected = collectSkillFilesDetailed(tree.files, candidate.path)
+    const files = collected.files
+    if (collected.truncated) {
+      return { ok: false, code: 'too-large', message: `"${name}" exceeds the skill file or size limit; nothing was imported.` }
+    }
+    if (!files.some((file) => file.path === SKILL_FILE)) {
+      return { ok: false, code: 'not-a-skill', message: `That skill has no ${SKILL_FILE}.` }
+    }
+    const stagedFiles = files.map((file) => {
+      const target = resolveWithin(locations.enabled, file.path)
+      return target === undefined ? undefined : { ...file, target }
+    })
+    if (stagedFiles.some((file) => file === undefined)) {
+      return { ok: false, code: 'bad-path', message: 'A skill file path leaves its directory.' }
+    }
+    installs.push({ candidate, name, locations, files: stagedFiles })
+  }
+
+  const created = []
+  try {
+    await mkdir(root.path, { recursive: true })
+    for (const install of installs) {
+      // Exclusive creation: a concurrent install must never be overwritten or
+      // removed by this request's rollback.
+      await mkdir(install.locations.enabled)
+      created.push(install.locations.enabled)
+      for (const file of install.files) {
+        await mkdir(dirname(file.target), { recursive: true })
+        await writeFile(file.target, file.content)
+      }
+    }
+  } catch (error) {
+    await Promise.all(created.map((path) => rm(path, { recursive: true, force: true })))
+    throw error
+  }
+
+  const imported = installs.map((install) => ({
+    entryName: install.name,
+    path: install.candidate.path,
+    files: install.files.length,
+  }))
+  return {
+    ok: true,
+    rootKey: root.key,
+    entryName: imported.length === 1 ? imported[0].entryName : undefined,
+    entries: imported,
+    files: imported.reduce((total, entry) => total + entry.files, 0),
+    source: {
+      repo: spec.kind === 'github' ? `${spec.owner}/${spec.repo}` : spec.url,
+      ref: tree.ref,
+      path: imported.length === 1 ? imported[0].path : undefined,
+      paths: imported.map((entry) => entry.path),
+      url: sourceLink(spec, tree.ref, imported[0].path),
+    },
+  }
+}
+
+/**
  * Show one path in the platform file manager.
  * @param path - an absolute path inside a managed root.
  * @returns whether the platform accepted the request.
@@ -792,6 +1000,8 @@ export async function dispatch(ctx, body) {
       return importDirectory(ctx, request)
     case 'import-files':
       return importFiles(ctx, request)
+    case 'install-from-remote':
+      return installFromRemote(ctx, request)
     case 'reveal': {
       const root = await findRoot(ctx, request.rootKey)
       if (root === undefined) return { ok: false, code: 'unknown-root', message: 'That root is not one this plugin manages.' }

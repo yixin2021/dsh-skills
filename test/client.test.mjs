@@ -20,6 +20,20 @@ const SOURCE = join(dirname(fileURLToPath(import.meta.url)), '..', 'client.js')
 const TEXT = await readFile(SOURCE, 'utf8')
 
 /**
+ * Define a global the runtime may already own.
+ *
+ * Node 21 turned `navigator` into a getter-only global, so assigning to it
+ * throws; the panel never reads it (it reads the Host's locale instead), but
+ * the harness sets it to prove as much.
+ *
+ * @param name - the global's name.
+ * @param value - the value it should hold.
+ */
+function defineGlobal(name, value) {
+  Object.defineProperty(globalThis, name, { value, writable: true, configurable: true })
+}
+
+/**
  * Load the client half against a stub runtime.
  *
  * @param options - `active` locale id, `navigatorLanguage`, `baseUri`.
@@ -91,7 +105,8 @@ function loadClient(options = {}) {
     },
   }
   globalThis.document = { baseURI: options.baseUri ?? 'http://127.0.0.1:1/', documentElement: { lang: '' } }
-  globalThis.navigator = { language: options.navigatorLanguage ?? 'en-US' }
+  // Node 21 made `navigator` a getter-only global, so it cannot be assigned.
+  defineGlobal('navigator', { language: options.navigatorLanguage ?? 'en-US' })
 
   new Function('window', TEXT)(globalThis.window)
   exports.apply(ctx)
@@ -376,7 +391,7 @@ function mountClient(options = {}) {
     },
   }
   globalThis.document = { baseURI: 'http://127.0.0.1:1/', documentElement: { lang: '' } }
-  globalThis.navigator = { language: 'en-US' }
+  defineGlobal('navigator', { language: 'en-US' })
   globalThis.fetch = async (url, init) => {
     calls.push({ url, init })
     return { status: 200, json: async () => ({ ok: true, roots }) }
@@ -725,4 +740,103 @@ test('an agent library is named after its agent and carries that agent\'s own ma
 
   // A manually added directory has no agent mark.
   assert.equal(tiles.filter((tile) => tile.props.style?.width === '15px').length, 1, 'only the agent cards carry a tile')
+})
+
+test('GitHub import offers multi-select and imports the selected skills together', async () => {
+  const root = { key: 'user-dsh', kind: 'user', source: 'user-dsh', path: '/home/u/.dsh/skills', exists: true, skills: [], trash: [] }
+  const app = mountClient({ roots: [root] })
+  await app.settle()
+
+  const open = app.buttons().find((entry) => entry.text === '从 GitHub 导入')
+  assert.ok(open, 'the toolbar offers GitHub import')
+  open.props.onClick()
+  assert.match(app.text(), /GitHub 链接/)
+
+  const inputs = elementsOf(app.render()).filter((element) => element.type === 'input')
+  const link = inputs.find((element) => element.props.className === 'dsm-input' && element.props.type !== 'password')
+  assert.ok(link, 'the dialog has a GitHub link field')
+  link.props.onChange({ target: { value: 'https://github.com/owner/repo' } })
+
+  const calls = []
+  let answered = false
+  globalThis.fetch = async (url, init) => {
+    const body = JSON.parse(init.body)
+    calls.push(body)
+    if (body.action === 'install-from-remote' && !answered) {
+      answered = true
+      return {
+        status: 200,
+        json: async () => ({
+          ok: false,
+          code: 'choose-skill',
+          candidates: [
+            { path: 'skills/alpha', name: 'alpha', description: 'Does the alpha thing.' },
+            { path: 'skills/beta', name: 'beta', description: 'Does the beta thing.' },
+          ],
+          total: 2,
+          truncated: false,
+        }),
+      }
+    }
+    return {
+      status: 200,
+      json: async () => ({ ok: true, rootKey: 'user-dsh', entries: [{ entryName: 'alpha' }, { entryName: 'beta' }], source: { repo: 'owner/repo' } }),
+    }
+  }
+
+  await app.click('扫描 GitHub')
+  assert.deepEqual(calls[0], { action: 'install-from-remote', rootKey: 'user-dsh', url: 'https://github.com/owner/repo' })
+  assert.match(app.text(), /选择要导入的技能/)
+  const checks = elementsOf(app.render()).filter((element) => element.type === 'input' && element.props.type === 'checkbox')
+  assert.equal(checks.length, 2)
+  assert.equal(checks[0].props.checked, true, 'found skills start selected')
+  assert.equal(checks[1].props.checked, true)
+
+  checks[0].props.onChange({ target: { checked: false } })
+  assert.ok(app.buttons().some((entry) => entry.text === '导入已选（1）'))
+  await app.click('清空选择')
+  assert.equal(app.buttons().find((entry) => entry.text === '导入已选（0）').props.disabled, true)
+  await app.click('全选')
+
+  await app.click('导入已选（2）')
+  await app.settle()
+  assert.deepEqual(calls[1], {
+    action: 'install-from-remote',
+    rootKey: 'user-dsh',
+    url: 'https://github.com/owner/repo',
+    paths: ['skills/alpha', 'skills/beta'],
+  })
+  assert.match(app.text(), /已从 owner\/repo 导入 2 个技能/)
+})
+
+test('a token is only sent when one was typed', async () => {
+  const root = { key: 'user-dsh', kind: 'user', source: 'user-dsh', path: '/home/u/.dsh/skills', exists: true, skills: [], trash: [] }
+  const app = mountClient({ roots: [root] })
+  await app.settle()
+
+  app.buttons().find((entry) => entry.text === '从 GitHub 导入').props.onClick()
+  const calls = []
+  globalThis.fetch = async (url, init) => {
+    const body = JSON.parse(init.body)
+    calls.push(body)
+    return { status: 200, json: async () => ({ ok: false, code: 'not-a-skill', message: 'nothing there' }) }
+  }
+
+  const inputs = elementsOf(app.render()).filter((element) => element.type === 'input')
+  const link = inputs.find((element) => element.props.className === 'dsm-input' && element.props.type !== 'password')
+  link.props.onChange({ target: { value: 'https://gitlab.com/owner/repo' } })
+  const secret = inputs.find((element) => element.props.className === 'dsm-input' && element.props.type === 'password')
+  assert.ok(secret, 'the dialog has a token field')
+  secret.props.onChange({ target: { value: 'glpat_secret' } })
+
+  await app.click('扫描 GitHub')
+  assert.deepEqual(calls[0], {
+    action: 'install-from-remote',
+    rootKey: 'user-dsh',
+    url: 'https://gitlab.com/owner/repo',
+    token: 'glpat_secret',
+  })
+
+  // A refusal is shown inside the dialog, where the person is looking.
+  assert.match(app.text(), /nothing there/)
 })

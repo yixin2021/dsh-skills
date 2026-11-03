@@ -1,7 +1,7 @@
 {
   "name": "dsh-skills",
   "version": "0.1.0",
-  "description": "Skills manager for DeepSeek Harness: a Skills panel in the left navigation that lists every installed Agent Skill, previews its instructions, enables or disables it without deleting it, installs one from a folder, and restores what was uninstalled.",
+  "description": "Skills manager for DeepSeek Harness: a Skills panel in the left navigation that lists every installed Agent Skill, previews its instructions, enables or disables it without deleting it, installs skills from a folder or in batches from GitHub, and restores what was uninstalled.",
   "keywords": [
     "deepseek-harness",
     "dsh",
@@ -33,6 +33,10 @@
     "index.js",
     "client.js",
     "lib/skills-core.js",
+    "lib/skill-tree.js",
+    "lib/github-source.js",
+    "lib/git-source.js",
+    "lib/remote-source.js",
     "cordis.patch.yml",
     "locale/*.json",
     "icon.svg",
@@ -42,8 +46,8 @@
     "docs/banner.png"
   ],
   "scripts": {
-    "check": "node --check index.js && node --check client.js && node --check lib/skills-core.js",
-    "test": "npm run check --silent && node --test test/"
+    "check": "node --check index.js && node --check client.js && node --check lib/skills-core.js && node --check lib/skill-tree.js && node --check lib/github-source.js && node --check lib/git-source.js && node --check lib/remote-source.js",
+    "test": "npm run check --silent && node --test test/*.test.mjs"
   },
   "publishConfig": {
     "registry": "https://registry.npmjs.org/"

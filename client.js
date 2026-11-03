@@ -6,8 +6,8 @@
  *     localized and whose selected state comes from the layout owner,
  *   - the page that row opens (`main`, keyed by the same id), listing every
  *     managed root with its skills, enabling and disabling them, previewing an
- *     instruction file, creating a new skill, installing one from disk, and
- *     restoring or purging what was uninstalled.
+ *     instruction file, creating a new skill, installing one from disk or from
+ *     a remote repository, and restoring or purging what was uninstalled.
  *
  * The page never reads a skill root itself: every fact comes from this
  * package's own Host route, so the browser has no filesystem authority.
@@ -56,6 +56,7 @@ window.__ModuleLoader__.load({
       'search.label': 'Search skills',
       'action.create': 'New skill',
       'action.install': 'Install from folder',
+      'action.importRemote': 'Import from GitHub',
       'action.reload': 'Reload',
       'action.reloading': 'Reloading…',
       'meta.refreshed': 'Last read {time}',
@@ -116,7 +117,7 @@ window.__ModuleLoader__.load({
       'loading.page': 'Reading skill roots…',
       'loading.body': 'Reading the instruction file…',
       'empty.title': 'No skills yet',
-      'empty.body': 'Install a folder that contains SKILL.md, or write one with New skill. Disabled skills stay on disk under .disabled and disappear from every catalog.',
+      'empty.body': 'Install a folder that contains SKILL.md, import skills from GitHub, or write one with New skill. Disabled skills stay on disk under .disabled and disappear from every catalog.',
       'empty.noMatch': 'No skill matches that search.',
       'empty.rootEmpty': 'This root has no skills yet.',
       'empty.rootMissing': 'This root does not exist yet. Create a skill to create it.',
@@ -138,6 +139,24 @@ window.__ModuleLoader__.load({
       'install.pick': 'Choose folder',
       'install.hint': 'The folder is copied into the root; the original stays where it is. Its name comes from the frontmatter, or from the folder name.',
       'install.noTarget': 'There is no writable root to copy into. Open a workspace, or create ~/.dsh/skills, and try again.',
+      'remote.title': 'Import skills from GitHub',
+      'remote.subtitle': 'Paste a GitHub repository or skill link.',
+      'remote.url': 'GitHub link',
+      'remote.urlPlaceholder': 'https://github.com/owner/repo',
+      'remote.token': 'Access token',
+      'remote.tokenPlaceholder': 'Optional · for a private repository',
+      'remote.tokenHint': 'The token is used only to read this source. It is never written to disk or included in the command line.',
+      'remote.root': 'Root',
+      'remote.submit': 'Scan GitHub',
+      'remote.importSelected': 'Import selected ({count})',
+      'remote.selectAll': 'Select all',
+      'remote.clearSelection': 'Clear selection',
+      'remote.reading': 'Reading GitHub…',
+      'remote.hint': 'GitHub is read as an archive. Repository contents are read as files; nothing is run.',
+      'remote.choose': 'Select the skills to import.',
+      'remote.truncated': 'Showing {shown} of {total} skills. Paste a link to a subdirectory to narrow the results.',
+      'remote.change': 'Use another link',
+      'remote.noTarget': 'There is no writable root to import into. Open a workspace, or create ~/.dsh/skills, and try again.',
       'notice.enabled': '{name} is enabled.',
       'notice.disabled': '{name} is disabled and hidden from every catalog.',
       'notice.trashed': '{name} moved to the trash. Restore it from the root card.',
@@ -146,6 +165,7 @@ window.__ModuleLoader__.load({
       'notice.trashEmptied': 'Removed {count} entries from the trash.',
       'notice.created': '{name} was created.',
       'notice.installed': '{name} was installed.',
+      'notice.imported': 'Imported {count} skill(s) from {source}: {name}.',
       'error.generic': 'The Host rejected that request.',
       'error.noSkillFile': 'That folder has no SKILL.md at its top level.',
       'error.revealFailed': 'Could not open that path.',
@@ -160,6 +180,7 @@ window.__ModuleLoader__.load({
       'search.label': '搜索技能',
       'action.create': '新建技能',
       'action.install': '从文件夹安装',
+      'action.importRemote': '从 GitHub 导入',
       'action.reload': '刷新',
       'action.reloading': '刷新中…',
       'meta.refreshed': '最后读取 {time}',
@@ -220,7 +241,7 @@ window.__ModuleLoader__.load({
       'loading.page': '正在读取技能目录…',
       'loading.body': '正在读取技能文件…',
       'empty.title': '还没有技能',
-      'empty.body': '安装一个包含 SKILL.md 的文件夹，或用「新建技能」写一个。停用的技能保留在磁盘的 .disabled 目录里，对所有目录不可见。',
+      'empty.body': '安装一个包含 SKILL.md 的文件夹，从 GitHub 批量导入技能，或用「新建技能」写一个。停用的技能保留在磁盘的 .disabled 目录里，对所有目录不可见。',
       'empty.noMatch': '没有匹配的技能。',
       'empty.rootEmpty': '该目录还没有技能。',
       'empty.rootMissing': '该目录尚未创建，新建一个技能即可创建它。',
@@ -242,6 +263,24 @@ window.__ModuleLoader__.load({
       'install.pick': '选择文件夹',
       'install.hint': '该文件夹会被复制到根目录，原目录保持不动；技能名取自 frontmatter，缺省时用文件夹名。',
       'install.noTarget': '没有可写入的目录：打开一个工作区，或创建 ~/.dsh/skills 后再试。',
+      'remote.title': '从 GitHub 导入技能',
+      'remote.subtitle': '粘贴 GitHub 仓库或技能链接。',
+      'remote.url': 'GitHub 链接',
+      'remote.urlPlaceholder': 'https://github.com/owner/repo',
+      'remote.token': '访问令牌',
+      'remote.tokenPlaceholder': '可选 · 私有仓库需要',
+      'remote.tokenHint': '令牌只用于读取当前来源：不会写入磁盘，也不会出现在命令行中。',
+      'remote.root': '根目录',
+      'remote.submit': '扫描 GitHub',
+      'remote.importSelected': '导入已选（{count}）',
+      'remote.selectAll': '全选',
+      'remote.clearSelection': '清空选择',
+      'remote.reading': '正在读取 GitHub…',
+      'remote.hint': 'GitHub 仓库以压缩包读取，所有内容只作为文件读取，不会执行。',
+      'remote.choose': '选择要导入的技能。',
+      'remote.truncated': '当前显示 {shown}/{total} 个技能。可粘贴子目录链接缩小范围。',
+      'remote.change': '换一个链接',
+      'remote.noTarget': '没有可写入的目录：打开一个工作区，或创建 ~/.dsh/skills 后再试。',
       'notice.enabled': '已启用 {name}。',
       'notice.disabled': '已停用 {name}，它将从所有目录中隐藏。',
       'notice.trashed': '{name} 已移入回收站，可在对应根目录卡片中恢复。',
@@ -250,6 +289,7 @@ window.__ModuleLoader__.load({
       'notice.trashEmptied': '已清空回收站中的 {count} 项。',
       'notice.created': '已创建 {name}。',
       'notice.installed': '已安装 {name}。',
+      'notice.imported': '已从 {source} 导入 {count} 个技能：{name}。',
       'error.generic': '宿主拒绝了该请求。',
       'error.noSkillFile': '该文件夹顶层没有 SKILL.md。',
       'error.revealFailed': '无法打开该路径。',
@@ -526,6 +566,18 @@ window.__ModuleLoader__.load({
         '.dsm-textarea{min-height:150px;resize:vertical;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:12px;line-height:19px}',
         '.dsm-switch{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--dsw-alias-label-secondary);cursor:pointer;user-select:none}',
         '.dsm-switch input{width:14px;height:14px;margin:0;accent-color:var(--dsw-alias-brand-primary);cursor:pointer}',
+        // The picker: one row per skill the repository holds. A row is a
+        // button, because picking one IS the action — there is no second step.
+        '.dsm-picker{display:flex;flex-direction:column;gap:6px;max-height:320px;overflow:auto}',
+        '.dsm-picker-item{display:flex;align-items:flex-start;gap:8px;width:100%;box-sizing:border-box;padding:8px 10px;border:0.5px solid var(--dsw-alias-border-l1);border-radius:8px;background:var(--dsw-alias-bg-base);color:var(--dsw-alias-label-primary);font:inherit;font-size:12px;text-align:left;cursor:pointer}',
+        '.dsm-picker-item:hover{background:var(--dsw-alias-bg-layer-2)}',
+        '.dsm-picker-item input{width:14px;height:14px;margin:2px 0 0;flex:none;accent-color:var(--dsw-alias-brand-primary)}',
+        '.dsm-picker-copy{display:flex;flex-direction:column;gap:2px;min-width:0}',
+        '.dsm-picker-name{font-size:13px;font-weight:600}',
+        '.dsm-picker-desc{color:var(--dsw-alias-label-secondary);font-size:12px}',
+        '.dsm-picker-path{color:var(--dsw-alias-label-secondary);font-size:11px;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;overflow-wrap:anywhere}',
+        '.dsm-picker-actions{display:flex;align-items:center;justify-content:flex-end;gap:6px;flex-wrap:wrap}',
+        '.dsm-hint{color:var(--dsw-alias-label-secondary);font-size:11px;line-height:16px}',
         '@media (max-width:640px){.dsm-page{padding:18px 14px 0}.dsm-thumb{right:-6px}.dsm-field{grid-template-columns:1fr}.dsm-row{flex-wrap:wrap}.dsm-row-actions{width:100%;justify-content:flex-end}}',
       ].join('\n')
     }
@@ -878,6 +930,67 @@ window.__ModuleLoader__.load({
           if (answer === undefined) return
           set({ dialog: undefined, notice: { tone: 'success', text: fill(t('notice.installed'), { name: payload.name }) } })
           await store.refresh({ quiet: true })
+        },
+        /**
+         * Import a skill from a remote repository.
+         *
+         * A repository that holds several skills answers `choose-skill`, and
+         * the dialog then offers a multi-select list. The token is optional and
+         * is only sent when there is one.
+         *
+         * @param form - the target root, the link, the token and the chosen
+         * directory inside the repository.
+         * @returns whether the skill was installed.
+         */
+        async installFromRemote(form) {
+          if (state.busy) return false
+          const url = typeof form.url === 'string' ? form.url.trim() : ''
+          if (url.length === 0) return false
+          const token = typeof form.token === 'string' ? form.token.trim() : ''
+          set({ busy: true, error: '', notice: null })
+          const answer = await callHost({
+            action: 'install-from-remote',
+            rootKey: form.rootKey,
+            url,
+            ...(token.length > 0 ? { token } : {}),
+            ...(Array.isArray(form.paths) ? { paths: form.paths } : {}),
+            ...(typeof form.path === 'string' ? { path: form.path } : {}),
+          })
+          set({ busy: false })
+          if (answer.ok === true) {
+            const source = answer.source?.repo ?? answer.source?.url ?? url
+            const entries = Array.isArray(answer.entries) ? answer.entries : [{ entryName: answer.entryName }]
+            const names = entries.map((entry) => entry.entryName).filter(Boolean).join(', ')
+            set({
+              dialog: undefined,
+              notice: {
+                tone: 'success',
+                text: fill(t('notice.imported'), { count: entries.length, name: names, source }),
+              },
+            })
+            await store.refresh({ quiet: true })
+            return true
+          }
+          if (answer.code === 'choose-skill') {
+            const candidates = Array.isArray(answer.candidates) ? answer.candidates : []
+            set({
+              dialog: {
+                kind: 'remote',
+                url,
+                rootKey: form.rootKey,
+                token,
+                candidates,
+                total: answer.total ?? candidates.length,
+                truncated: answer.truncated === true,
+                selectedPaths: candidates.map((candidate) => candidate.path),
+              },
+            })
+            return false
+          }
+          const message = answer.message || t('error.generic')
+          const previous = state.dialog?.kind === 'remote' && state.dialog.url === url ? state.dialog : {}
+          set({ error: message, dialog: { ...previous, kind: 'remote', url, rootKey: form.rootKey, token, error: message } })
+          return false
         },
         /**
          * Show one entry in the platform file manager.
@@ -1246,6 +1359,155 @@ window.__ModuleLoader__.load({
         )
       }
 
+      /** Import one or more skills from a GitHub repository. */
+      function RemoteInstallDialog({ roots, defaultRootKey, dialog, busy }) {
+        const [url, setUrl] = React.useState(dialog.url ?? '')
+        const [token, setToken] = React.useState(dialog.token ?? '')
+        const [rootKey, setRootKey] = React.useState(dialog.rootKey ?? defaultRootKey)
+        const candidates = Array.isArray(dialog.candidates) ? dialog.candidates : []
+        const selectedPaths = Array.isArray(dialog.selectedPaths) ? dialog.selectedPaths : []
+        const blocked = roots.length === 0
+        const ready = url.trim().length > 0 && !blocked
+        const choose = (path, checked) => {
+          const next = checked
+            ? [...new Set([...selectedPaths, path])]
+            : selectedPaths.filter((selected) => selected !== path)
+          store.setDialog({ ...dialog, rootKey, selectedPaths: next })
+        }
+        const submit = (paths) => {
+          if (!ready || busy) return
+          store.installFromRemote({ rootKey, url: url.trim(), token: token.trim(), paths })
+        }
+
+        return h(
+          Dialog,
+          {
+            title: t('remote.title'),
+            subtitle: t('remote.subtitle'),
+            onClose: () => store.setDialog(undefined),
+            footer: [
+              h(Action, { key: 'cancel', onClick: () => store.setDialog(undefined) }, t('action.cancel')),
+              candidates.length > 0
+                ? h(
+                    Action,
+                    { key: 'submit', variant: 'primary', onClick: () => submit(selectedPaths), disabled: !ready || busy || selectedPaths.length === 0 },
+                    busy ? t('remote.reading') : fill(t('remote.importSelected'), { count: selectedPaths.length }),
+                  )
+                : h(
+                    Action,
+                    { key: 'submit', variant: 'primary', onClick: () => submit(undefined), disabled: !ready || busy },
+                    busy ? t('remote.reading') : t('remote.submit'),
+                  ),
+            ],
+          },
+          h(
+            'div',
+            { className: 'dsm-form' },
+            h(
+              'div',
+              { className: 'dsm-col' },
+              h('span', { className: 'dsm-label' }, t('remote.url')),
+              h('input', {
+                className: 'dsm-input',
+                value: url,
+                placeholder: t('remote.urlPlaceholder'),
+                'aria-label': t('remote.url'),
+                disabled: busy,
+                onChange: (event) => {
+                  setUrl(event.target.value)
+                  store.setDialog({ kind: 'remote', url: event.target.value, rootKey, token })
+                },
+                onKeyDown: (event) => {
+                  if (event.key === 'Enter') submit(candidates.length > 0 ? selectedPaths : undefined)
+                },
+              }),
+            ),
+            h(
+              'div',
+              { className: 'dsm-col' },
+              h('span', { className: 'dsm-label' }, t('remote.token')),
+              h('input', {
+                className: 'dsm-input',
+                type: 'password',
+                value: token,
+                placeholder: t('remote.tokenPlaceholder'),
+                'aria-label': t('remote.token'),
+                disabled: busy,
+                onChange: (event) => {
+                  setToken(event.target.value)
+                  store.setDialog({ kind: 'remote', url, rootKey, token: event.target.value })
+                },
+              }),
+              h('span', { className: 'dsm-hint' }, t('remote.tokenHint')),
+            ),
+            blocked
+              ? null
+              : h(
+                  'div',
+                  { className: 'dsm-col' },
+                  h('span', { className: 'dsm-label' }, t('remote.root')),
+                  h(
+                    'select',
+                    { className: 'dsm-input', value: rootKey, onChange: (event) => setRootKey(event.target.value) },
+                    roots.map((root) => h('option', { key: root.key, value: root.key }, rootLabel(root))),
+                  ),
+                ),
+            h('div', { className: 'dsm-note' }, blocked ? t('remote.noTarget') : t('remote.hint')),
+            dialog.error ? h('div', { className: 'dsm-note dsm-note-error', role: 'alert' }, dialog.error) : null,
+            candidates.length > 0
+              ? h(
+                  'div',
+                  { className: 'dsm-col' },
+                  h('span', { className: 'dsm-label' }, t('remote.choose')),
+                  dialog.truncated
+                    ? h('div', { className: 'dsm-note' }, fill(t('remote.truncated'), { shown: candidates.length, total: dialog.total }))
+                    : null,
+                  h(
+                    'div',
+                    { className: 'dsm-picker' },
+                    candidates.map((candidate) => {
+                      const checked = selectedPaths.includes(candidate.path)
+                      return h(
+                        'label',
+                        { key: candidate.path, className: 'dsm-picker-item' },
+                        h('input', {
+                          type: 'checkbox',
+                          checked,
+                          disabled: busy,
+                          onChange: (event) => choose(candidate.path, event.target.checked),
+                        }),
+                        h('span', { className: 'dsm-picker-copy' },
+                          h('span', { className: 'dsm-picker-name' }, candidate.name || candidate.path),
+                          candidate.description ? h('span', { className: 'dsm-picker-desc' }, candidate.description) : null,
+                          h('span', { className: 'dsm-picker-path' }, candidate.path),
+                        ),
+                      )
+                    }),
+                  ),
+                  h(
+                    'div',
+                    { className: 'dsm-picker-actions' },
+                    h(Action, {
+                      variant: 'quiet',
+                      disabled: busy || selectedPaths.length === candidates.length,
+                      onClick: () => store.setDialog({ ...dialog, rootKey, selectedPaths: candidates.map((candidate) => candidate.path) }),
+                    }, t('remote.selectAll')),
+                    h(Action, {
+                      variant: 'quiet',
+                      disabled: busy || selectedPaths.length === 0,
+                      onClick: () => store.setDialog({ ...dialog, rootKey, selectedPaths: [] }),
+                    }, t('remote.clearSelection')),
+                    h(Action, {
+                      variant: 'quiet',
+                      onClick: () => store.setDialog({ kind: 'remote', url, rootKey, token }),
+                    }, t('remote.change')),
+                  ),
+                )
+              : null,
+          ),
+        )
+      }
+
       /** One skill row. */
       function SkillRow({ rootKey, skill, readOnly }) {
         const issues = skill.issues ?? []
@@ -1507,6 +1769,7 @@ window.__ModuleLoader__.load({
             ),
             h(Action, { variant: 'primary', onClick: () => store.setDialog({ kind: 'create' }) }, t('action.create')),
             h(Action, { onClick: () => store.setDialog({ kind: 'install' }) }, t('action.install')),
+            h(Action, { onClick: () => store.setDialog({ kind: 'remote' }) }, t('action.importRemote')),
             h(Action, { onClick: () => store.setDialog({ kind: 'add-root' }) }, t('action.addRoot')),
             h(
               Action,
@@ -1578,6 +1841,14 @@ window.__ModuleLoader__.load({
           state.dialog?.kind === 'add-root' ? h(AddRootDialog, null) : null,
           state.dialog?.kind === 'install'
             ? h(InstallDialog, { roots: manageable, defaultRootKey: defaultRoot, source: state.dialog.source })
+            : null,
+          state.dialog?.kind === 'remote'
+            ? h(RemoteInstallDialog, {
+                roots: manageable,
+                defaultRootKey: defaultRoot,
+                dialog: state.dialog,
+                busy: state.busy,
+              })
             : null,
         )
       }
