@@ -24,6 +24,7 @@ for turning one off without editing files. This plugin adds that surface.
 | **New skill** | Write a bundle with a valid frontmatter block from a form. |
 | **Uninstall safely** | Uninstall moves the entry to a root-local `.trash`; restore it later, or delete it for good. |
 | **Locate** | Reveal a skill or a root in Finder / Explorer / the desktop file manager. |
+| **Add a directory** | Point the panel at another agent's skill library — `~/.claude/skills`, a colleague's checkout, an archive on an external disk. Added directories are read-only and can be removed from the list at any time. |
 
 ## Install
 
@@ -60,7 +61,7 @@ the navigation row and the panel. Reload the window after installing.
 **Host half** (`index.js`) registers one authenticated JSON route,
 `POST /api/dsh-skills`, on `ctx.connection.fetch`. It answers `list`, `read`,
 `set-disabled`, `trash`, `restore`, `purge`, `empty-trash`, `create`,
-`import-directory`, `import-files` and `reveal`. `lib/skills-core.js` owns the
+`import-directory`, `import-files`, `reveal`, `add-root` and `remove-root`. `lib/skills-core.js` owns the
 skill grammar — frontmatter parsing, root discovery, entry scanning — so the
 route and the tests agree on what a skill is.
 
@@ -76,6 +77,22 @@ to `<root>/.disabled/<name>` — hidden, therefore invisible to every provider �
 and moved back untouched when re-enabled. Nothing in `SKILL.md` is rewritten,
 so a hand-written skill survives a round trip byte for byte. The same trick
 backs `.trash`.
+
+### Added directories
+
+DSH scans four roots and no others, so adding a directory cannot make DSH load
+it. What it does do is put another agent's library in front of you: the panel
+lists its skills, previews them, and copies one into a root DSH does scan.
+
+Because a switch there would change nothing, an added root is **read-only**:
+no enable/disable, no uninstall, no create, and it is never offered as an
+install target. The Host enforces this too (`code: 'read-only'`), so the rule
+does not depend on the page behaving.
+
+The list lives in `$DSH_HOME/skills-roots.json` — beside the skills rather than
+inside a profile, so it survives a profile rebuild and is shared by the web and
+desktop apps. A malformed file is read as an empty list; adding a directory
+rewrites it.
 
 ### Scoping
 

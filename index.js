@@ -22,6 +22,7 @@ import { basename, dirname, join } from 'node:path'
 
 import {
   DISABLED_DIR,
+  MAX_CUSTOM_ROOTS,
   MAX_INSTALL_BYTES,
   MAX_INSTALL_FILES,
   MAX_SKILL_BYTES,
@@ -29,6 +30,7 @@ import {
   SKILL_FILE,
   TRASH_DIR,
   composeSkillFile,
+  customRootKey,
   describeSkill,
   entryLocations,
   isSkillName,
@@ -51,6 +53,74 @@ function dshHome() {
 /** The agents home DSH reads as its lowest-priority user root. */
 function agentsHome() {
   return process.env.DSH_AGENTS_HOME || join(homedir(), '.agents')
+}
+
+/**
+ * Where the added directories are remembered.
+ *
+ * The list lives beside the skills themselves rather than inside the profile,
+ * so it survives a profile rebuild and stays the same across the web and
+ * desktop apps.
+ *
+ * @returns the absolute path of the JSON file.
+ */
+function customRootsFile() {
+  return join(dshHome(), 'skills-roots.json')
+}
+
+/**
+ * Expand a leading `~` so a typed path behaves like it does in a shell.
+ * @param value - the raw request value.
+ * @returns the absolute path, or undefined when it is not one.
+ */
+function expandHome(value) {
+  if (typeof value !== 'string') return undefined
+  const trimmed = value.trim()
+  if (trimmed.length === 0 || trimmed.includes('\0')) return undefined
+  if (trimmed === '~') return homedir()
+  if (trimmed.startsWith('~/')) return join(homedir(), trimmed.slice(2))
+  return trimmed.startsWith('/') ? trimmed : undefined
+}
+
+/**
+ * Read the added directories.
+ *
+ * A malformed or missing file is an empty list, not an error: the page must
+ * still open when the bookkeeping is damaged, and the next `add` rewrites it.
+ *
+ * @returns the remembered absolute paths, in the order they were added.
+ */
+async function readCustomRoots() {
+  let text
+  try {
+    text = await readFile(customRootsFile(), 'utf8')
+  } catch {
+    return []
+  }
+  let parsed
+  try {
+    parsed = JSON.parse(text)
+  } catch {
+    return []
+  }
+  const list = Array.isArray(parsed?.paths) ? parsed.paths : []
+  const paths = []
+  for (const value of list) {
+    const path = expandHome(value)
+    if (path === undefined || paths.includes(path)) continue
+    paths.push(path)
+    if (paths.length >= MAX_CUSTOM_ROOTS) break
+  }
+  return paths
+}
+
+/**
+ * Persist the added directories.
+ * @param paths - absolute paths, in display order.
+ */
+async function writeCustomRoots(paths) {
+  await mkdir(dshHome(), { recursive: true })
+  await writeFile(customRootsFile(), `${JSON.stringify({ paths }, null, 2)}\n`, 'utf8')
 }
 
 /** @returns whether `value` is a plain JSON object. */
@@ -88,11 +158,45 @@ function workspaceList(ctx) {
  */
 async function findRoot(ctx, key) {
   if (typeof key !== 'string') return undefined
-  const roots = await listRoots({ dshHome: dshHome(), agentsHome: agentsHome(), workspaces: workspaceList(ctx) })
+  const roots = await listRoots({
+    dshHome: dshHome(),
+    agentsHome: agentsHome(),
+    workspaces: workspaceList(ctx),
+    customPaths: await readCustomRoots(),
+  })
   const known = roots.find((root) => root.key === key)
   if (known !== undefined) return known
   // A project root the workspace registry no longer lists cannot be addressed.
   return undefined
+}
+
+/**
+ * Resolve a root this plugin is allowed to change.
+ *
+ * Added directories are read-only on purpose. DSH does not scan them, so
+ * enabling or trashing a skill there would change nothing the Harness honours
+ * while still editing somebody else's library. Reading and copying out are the
+ * operations that make sense, and both stay available.
+ *
+ * @param ctx - Host context.
+ * @param key - a root key from a previous `list`.
+ * @returns `{ root }` when writable, `{ error }` with a typed refusal otherwise.
+ */
+async function writableRoot(ctx, key) {
+  const root = await findRoot(ctx, key)
+  if (root === undefined) {
+    return { error: { ok: false, code: 'unknown-root', message: 'That root is not one this plugin manages.' } }
+  }
+  if (root.readOnly === true) {
+    return {
+      error: {
+        ok: false,
+        code: 'read-only',
+        message: `${root.path} was added for reading. Copy the skill into a root DSH scans instead.`,
+      },
+    }
+  }
+  return { root }
 }
 
 /**
@@ -173,8 +277,9 @@ async function readSkill(ctx, request) {
  * @returns the new state, or a typed failure.
  */
 async function setDisabled(ctx, request) {
-  const root = await findRoot(ctx, request.rootKey)
-  if (root === undefined) return { ok: false, code: 'unknown-root', message: 'That root is not one this plugin manages.' }
+  const guard = await writableRoot(ctx, request.rootKey)
+  if (guard.error !== undefined) return guard.error
+  const root = guard.root
   const locations = findEntry(root, request.entryName)
   if (locations === undefined) return { ok: false, code: 'bad-name', message: 'That entry name is not a skill name.' }
   const wantDisabled = request.disabled === true
@@ -204,8 +309,9 @@ async function setDisabled(ctx, request) {
  * @returns the new state, or a typed failure.
  */
 async function moveToTrash(ctx, request) {
-  const root = await findRoot(ctx, request.rootKey)
-  if (root === undefined) return { ok: false, code: 'unknown-root', message: 'That root is not one this plugin manages.' }
+  const guard = await writableRoot(ctx, request.rootKey)
+  if (guard.error !== undefined) return guard.error
+  const root = guard.root
   const locations = findEntry(root, request.entryName)
   if (locations === undefined) return { ok: false, code: 'bad-name', message: 'That entry name is not a skill name.' }
   const restore = request.restore === true
@@ -240,8 +346,9 @@ async function firstExisting(paths) {
  * @returns the removal outcome, or a typed failure.
  */
 async function purgeEntry(ctx, request) {
-  const root = await findRoot(ctx, request.rootKey)
-  if (root === undefined) return { ok: false, code: 'unknown-root', message: 'That root is not one this plugin manages.' }
+  const guard = await writableRoot(ctx, request.rootKey)
+  if (guard.error !== undefined) return guard.error
+  const root = guard.root
   if (!isSkillName(request.entryName)) return { ok: false, code: 'bad-name', message: 'That entry name is not a skill name.' }
   const target = resolveWithin(join(root.path, TRASH_DIR), request.entryName)
   if (target === undefined) return { ok: false, code: 'bad-name', message: 'That path leaves the trash.' }
@@ -257,8 +364,9 @@ async function purgeEntry(ctx, request) {
  * @returns how many entries were removed.
  */
 async function emptyTrash(ctx, request) {
-  const root = await findRoot(ctx, request.rootKey)
-  if (root === undefined) return { ok: false, code: 'unknown-root', message: 'That root is not one this plugin manages.' }
+  const guard = await writableRoot(ctx, request.rootKey)
+  if (guard.error !== undefined) return guard.error
+  const root = guard.root
   const trash = join(root.path, TRASH_DIR)
   const entries = await readdir(trash).catch(() => undefined)
   if (entries === undefined) return { ok: true, rootKey: root.key, removed: 0 }
@@ -276,8 +384,9 @@ async function emptyTrash(ctx, request) {
  * @returns the created entry, or a typed failure.
  */
 async function createSkill(ctx, request) {
-  const root = await findRoot(ctx, request.rootKey)
-  if (root === undefined) return { ok: false, code: 'unknown-root', message: 'That root is not one this plugin manages.' }
+  const guard = await writableRoot(ctx, request.rootKey)
+  if (guard.error !== undefined) return guard.error
+  const root = guard.root
   const name = typeof request.name === 'string' ? request.name.trim() : ''
   if (!isSkillName(name)) {
     return { ok: false, code: 'bad-name', message: 'Use letters, digits, dots, dashes or underscores; start with a letter or digit.' }
@@ -310,8 +419,9 @@ async function createSkill(ctx, request) {
  * @returns the installed entry, or a typed failure.
  */
 async function importDirectory(ctx, request) {
-  const root = await findRoot(ctx, request.rootKey)
-  if (root === undefined) return { ok: false, code: 'unknown-root', message: 'That root is not one this plugin manages.' }
+  const guard = await writableRoot(ctx, request.rootKey)
+  if (guard.error !== undefined) return guard.error
+  const root = guard.root
   if (typeof request.sourcePath !== 'string' || !request.sourcePath.startsWith('/')) {
     return { ok: false, code: 'bad-path', message: 'An absolute source directory is required.' }
   }
@@ -344,8 +454,9 @@ async function importDirectory(ctx, request) {
  * @returns the installed entry, or a typed failure.
  */
 async function importFiles(ctx, request) {
-  const root = await findRoot(ctx, request.rootKey)
-  if (root === undefined) return { ok: false, code: 'unknown-root', message: 'That root is not one this plugin manages.' }
+  const guard = await writableRoot(ctx, request.rootKey)
+  if (guard.error !== undefined) return guard.error
+  const root = guard.root
   const name = typeof request.name === 'string' ? request.name.trim() : ''
   if (!isSkillName(name)) return { ok: false, code: 'bad-name', message: `"${name}" is not a usable skill name.` }
   if (!Array.isArray(request.files) || request.files.length === 0) {
@@ -415,13 +526,75 @@ function revealPath(path) {
 }
 
 /**
+ * Add one directory to the list of extra roots.
+ *
+ * The directory is shown, never changed: DSH does not scan it, so the page
+ * offers copying a skill out of it instead of a switch that would lie.
+ *
+ * @param request - `path` as typed by a person.
+ * @returns the added directory, or a typed refusal.
+ */
+async function addCustomRoot(ctx, request) {
+  const path = expandHome(request.path)
+  if (path === undefined) {
+    return { ok: false, code: 'bad-path', message: 'An absolute directory path is required.' }
+  }
+  const info = await stat(path).catch(() => undefined)
+  if (info === undefined || !info.isDirectory()) {
+    return { ok: false, code: 'missing', message: `${path} is not a directory.` }
+  }
+  const managed = await listRoots({ dshHome: dshHome(), agentsHome: agentsHome(), workspaces: workspaceList(ctx) })
+  if (managed.some((root) => root.path === path)) {
+    return { ok: false, code: 'duplicate', message: `${path} is already listed.` }
+  }
+  const paths = await readCustomRoots()
+  if (paths.includes(path)) {
+    return { ok: false, code: 'duplicate', message: `${path} is already listed.` }
+  }
+  if (paths.length >= MAX_CUSTOM_ROOTS) {
+    return { ok: false, code: 'limit', message: `At most ${MAX_CUSTOM_ROOTS} extra directories can be added.` }
+  }
+  paths.push(path)
+  await writeCustomRoots(paths)
+  return { ok: true, key: customRootKey(path), path }
+}
+
+/**
+ * Forget one added directory.
+ *
+ * Only the bookkeeping entry goes away; nothing on disk is touched.
+ *
+ * @param request - `path` or `rootKey` of the added directory.
+ * @returns how many entries were forgotten.
+ */
+async function removeCustomRoot(ctx, request) {
+  const path = expandHome(request.path)
+  const key = typeof request.rootKey === 'string' ? request.rootKey : undefined
+  if (path === undefined && key === undefined) {
+    return { ok: false, code: 'bad-request', message: 'A path or a root key is required.' }
+  }
+  const paths = await readCustomRoots()
+  const remaining = paths.filter((entry) => (path !== undefined ? entry !== path : customRootKey(entry) !== key))
+  if (remaining.length === paths.length) {
+    return { ok: false, code: 'unknown-root', message: 'That directory is not in the added list.' }
+  }
+  await writeCustomRoots(remaining)
+  return { ok: true, removed: paths.length - remaining.length }
+}
+
+/**
  * Compose the answer to one `list` request.
  * @param ctx - Host context.
  * @returns every managed root with its skills and its trash.
  */
 async function listEverything(ctx) {
   const workspaces = workspaceList(ctx)
-  const roots = await listRoots({ dshHome: dshHome(), agentsHome: agentsHome(), workspaces })
+  const roots = await listRoots({
+    dshHome: dshHome(),
+    agentsHome: agentsHome(),
+    workspaces,
+    customPaths: await readCustomRoots(),
+  })
   const answers = []
   const warnings = []
   for (const root of roots) {
@@ -453,6 +626,7 @@ async function listEverything(ctx) {
       workspacePath: root.workspacePath,
       workspaceTitle: root.workspaceTitle,
       exists: scanned.exists,
+      readOnly: root.readOnly === true,
       skills: scanned.skills.map((skill) => ({ ...skill, rootKey: root.key })),
       trash,
     })
@@ -472,6 +646,10 @@ export async function dispatch(ctx, body) {
   switch (request.action) {
     case 'list':
       return listEverything(ctx)
+    case 'add-root':
+      return addCustomRoot(ctx, request)
+    case 'remove-root':
+      return removeCustomRoot(ctx, request)
     case 'read':
       return readSkill(ctx, request)
     case 'set-disabled':
@@ -537,4 +715,14 @@ export function apply(ctx) {
 }
 
 /** Exported for the verification harness; not part of the plugin surface. */
-export const internals = { dshHome, agentsHome, workspaceList, findRoot, findEntry, locateSkill }
+export const internals = {
+  dshHome,
+  agentsHome,
+  workspaceList,
+  findRoot,
+  findEntry,
+  locateSkill,
+  readCustomRoots,
+  writeCustomRoots,
+  customRootsFile,
+}

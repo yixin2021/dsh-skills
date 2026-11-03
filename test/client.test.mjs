@@ -356,7 +356,16 @@ function mountClient(options = {}) {
   }
 
   let exports
+  // The dialogs register an Escape listener on mount, so the fake window needs
+  // the two methods a real one has.
+  const listeners = new Map()
   globalThis.window = {
+    addEventListener(type, handler) {
+      listeners.set(type, handler)
+    },
+    removeEventListener(type) {
+      listeners.delete(type)
+    },
     __ModuleLoader__: {
       load({ factory }) {
         exports = factory((name) => {
@@ -618,4 +627,64 @@ test('the list scrollbar follows the scroll and fades out when it stops', async 
   node.scrollHeight = 400
   node.listeners.get('scroll')()
   assert.equal(app.thumb().props['data-on'], 'false', 'a list that fits draws no thumb')
+})
+
+test('an added directory is browsable, removable, and offers no switch', async () => {
+  const added = {
+    key: 'custom:0badc0de',
+    kind: 'custom',
+    source: 'custom',
+    path: '/home/u/.claude/skills',
+    exists: true,
+    readOnly: true,
+    skills: [
+      { name: 'alpha', entryName: 'alpha', entryKind: 'directory', description: 'Alpha.', disabled: false, modelInvocable: true, userInvocable: true, issues: [], path: '/home/u/.claude/skills/alpha' },
+    ],
+    trash: [],
+  }
+  const app = mountClient({ roots: [added] })
+  await app.settle()
+
+  const labels = app.buttons().map((entry) => entry.text)
+  assert.ok(labels.includes('添加目录'), 'the toolbar offers to add a directory')
+  assert.ok(labels.includes('移除'), 'the card offers to forget it')
+  assert.ok(labels.includes('安装…'), 'a skill can be copied out of it')
+  assert.ok(!labels.includes('卸载'), 'a skill in it cannot be uninstalled')
+  // The read-only card must not present a destructive switch either.
+  const text = app.text()
+  assert.match(text, /只读/, 'the card says it is read-only')
+
+  const tree = app.render()
+  const toggles = elementsOf(tree).filter((element) => element.type === 'input' && element.props?.type === 'checkbox')
+  assert.equal(toggles.length, 0, 'no checkbox is rendered for a read-only root')
+
+  // Installing from it opens the copy dialog with the source path filled in.
+  const install = app.buttons().find((entry) => entry.text === '安装…')
+  install.props.onClick()
+  const dialog = app.text()
+  assert.match(dialog, /安装/, 'the install dialog opens')
+  assert.match(dialog, /\/home\/u\/\.claude\/skills\/alpha/, 'the dialog names the source')
+})
+
+test('removing an added directory asks the Host once', async () => {
+  const added = {
+    key: 'custom:0badc0de',
+    kind: 'custom',
+    source: 'custom',
+    path: '/home/u/.claude/skills',
+    exists: true,
+    readOnly: true,
+    skills: [],
+    trash: [],
+  }
+  const app = mountClient({ roots: [added] })
+  await app.settle()
+  const before = app.calls.length
+
+  const remove = app.buttons().find((entry) => entry.text === '移除')
+  await remove.props.onClick()
+  await app.settle()
+
+  const sent = app.calls.slice(before).map((call) => JSON.parse(call.init.body))
+  assert.deepEqual(sent[0], { action: 'remove-root', rootKey: 'custom:0badc0de', path: '/home/u/.claude/skills' })
 })

@@ -74,6 +74,23 @@ window.__ModuleLoader__.load({
       'root.project': 'Project · {name}',
       'root.dsh': 'Personal · ~/.dsh/skills',
       'root.agents': 'Agents · ~/.agents/skills',
+      'root.custom': 'Added · {name}',
+      'chip.readOnly': 'Read only',
+      'action.addRoot': 'Add directory',
+      'action.remove': 'Remove',
+      'action.installTo': 'Install…',
+      'addRoot.title': 'Add a skill directory',
+      'addRoot.subtitle': 'Point at another agent\'s skill library',
+      'addRoot.label': 'Directory path',
+      'addRoot.placeholder': '~/.claude/skills',
+      'addRoot.hint':
+        'The directory is listed for reading only: DSH does not scan it, so there is no switch here. Open a skill and use "Install…" to copy it into a root DSH does scan.',
+      'addRoot.add': 'Add',
+      'install.source': 'Source',
+      'install.from': 'Copied from {path}',
+      'notice.rootAdded': 'Added {path}',
+      'notice.rootRemoved': 'Removed {path} from the list',
+      'error.rootPath': 'That path is not a directory.',
       'status.enabled': 'Enabled',
       'status.disabled': 'Disabled',
       'chip.disabled': 'off',
@@ -114,6 +131,7 @@ window.__ModuleLoader__.load({
       'install.subtitle': 'Pick a folder that contains SKILL.md at its top level.',
       'install.pick': 'Choose folder',
       'install.hint': 'The folder is copied into the root; the original stays where it is. Its name comes from the frontmatter, or from the folder name.',
+      'install.noTarget': 'There is no writable root to copy into. Open a workspace, or create ~/.dsh/skills, and try again.',
       'notice.enabled': '{name} is enabled.',
       'notice.disabled': '{name} is disabled and hidden from every catalog.',
       'notice.trashed': '{name} moved to the trash. Restore it from the root card.',
@@ -154,6 +172,23 @@ window.__ModuleLoader__.load({
       'root.project': '项目 · {name}',
       'root.dsh': '个人 · ~/.dsh/skills',
       'root.agents': 'Agents · ~/.agents/skills',
+      'root.custom': '自定义 · {name}',
+      'chip.readOnly': '只读',
+      'action.addRoot': '添加目录',
+      'action.remove': '移除',
+      'action.installTo': '安装…',
+      'addRoot.title': '添加技能目录',
+      'addRoot.subtitle': '指向另一个 agent 的技能库',
+      'addRoot.label': '目录路径',
+      'addRoot.placeholder': '~/.claude/skills',
+      'addRoot.hint':
+        '该目录只用于浏览：DSH 不会扫描它，所以这里没有启用/停用开关。打开某个技能后点「安装…」，即可复制到 DSH 会扫描的目录。',
+      'addRoot.add': '添加',
+      'install.source': '来源',
+      'install.from': '来自 {path}',
+      'notice.rootAdded': '已添加 {path}',
+      'notice.rootRemoved': '已从列表移除 {path}',
+      'error.rootPath': '该路径不是一个目录。',
       'status.enabled': '已启用',
       'status.disabled': '已停用',
       'chip.disabled': '停用',
@@ -194,6 +229,7 @@ window.__ModuleLoader__.load({
       'install.subtitle': '选择一个顶层包含 SKILL.md 的文件夹。',
       'install.pick': '选择文件夹',
       'install.hint': '该文件夹会被复制到根目录，原目录保持不动；技能名取自 frontmatter，缺省时用文件夹名。',
+      'install.noTarget': '没有可写入的目录：打开一个工作区，或创建 ~/.dsh/skills 后再试。',
       'notice.enabled': '已启用 {name}。',
       'notice.disabled': '已停用 {name}，它将从所有目录中隐藏。',
       'notice.trashed': '{name} 已移入回收站，可在对应根目录卡片中恢复。',
@@ -769,6 +805,56 @@ window.__ModuleLoader__.load({
          * Install the skill in a folder the user picks.
          * @param rootKey - the root that receives it.
          */
+        /**
+         * Remember one extra directory.
+         *
+         * @param path - what the person typed; the Host expands `~` and checks
+         * that the path is a directory.
+         */
+        async addRoot(path) {
+          const typed = typeof path === 'string' ? path.trim() : ''
+          if (typed.length === 0 || state.busy) return
+          set({ busy: true, error: '', notice: null })
+          const answer = await act({ action: 'add-root', path: typed })
+          set({ busy: false })
+          if (answer === undefined) return
+          set({ dialog: undefined, notice: { tone: 'success', text: fill(t('notice.rootAdded'), { path: answer.path }) } })
+          await store.refresh({ quiet: true })
+        },
+        /**
+         * Forget one added directory. Nothing on disk moves.
+         * @param root - the root record from the last list.
+         */
+        async removeRoot(root) {
+          if (state.busy) return
+          set({ busy: true, error: '', notice: null })
+          const answer = await act({ action: 'remove-root', rootKey: root.key, path: root.path })
+          set({ busy: false })
+          if (answer === undefined) return
+          set({
+            error: '',
+            notice: { tone: 'success', text: fill(t('notice.rootRemoved'), { path: root.path }) },
+            // Drop a filter that pointed at the directory that just went away.
+            rootFilter: state.rootFilter === root.key ? undefined : state.rootFilter,
+          })
+          await store.refresh({ quiet: true })
+        },
+        /**
+         * Copy one skill out of an added directory into a root DSH scans.
+         *
+         * @param rootKey - the target root.
+         * @param sourcePath - the skill's directory.
+         * @param label - the skill name, for the notice.
+         */
+        async installFromRoot(rootKey, sourcePath, label) {
+          if (state.busy) return
+          set({ busy: true, error: '', notice: null })
+          const answer = await act({ action: 'import-directory', rootKey, sourcePath })
+          set({ busy: false })
+          if (answer === undefined) return
+          set({ dialog: undefined, notice: { tone: 'success', text: fill(t('notice.installed'), { name: answer.entryName ?? label }) } })
+          await store.refresh({ quiet: true })
+        },
         async installFromFolder(rootKey) {
           if (state.busy) return
           const files = await pickFiles()
@@ -870,6 +956,10 @@ window.__ModuleLoader__.load({
 
       /** @returns the readable name of one root. */
       function rootLabel(root) {
+        if (root.kind === 'custom') {
+          const name = String(root.path ?? '').split('/').filter(Boolean).pop() || root.path
+          return fill(t('root.custom'), { name })
+        }
         if (root.kind === 'project') {
           const name = root.workspaceTitle || String(root.workspacePath ?? '').split('/').filter(Boolean).pop() || root.path
           return fill(t('root.project'), { name })
@@ -931,6 +1021,46 @@ window.__ModuleLoader__.load({
       }
 
       /** The create form. */
+      /** Ask for one extra directory to list. */
+      function AddRootDialog() {
+        const [path, setPath] = React.useState('')
+        const ready = path.trim().length > 0
+        const submit = () => {
+          if (ready) store.addRoot(path)
+        }
+        return h(
+          Dialog,
+          {
+            title: t('addRoot.title'),
+            subtitle: t('addRoot.subtitle'),
+            onClose: () => store.setDialog(undefined),
+            footer: [
+              h(Action, { key: 'cancel', onClick: () => store.setDialog(undefined) }, t('action.cancel')),
+              h(Action, { key: 'add', variant: 'primary', onClick: submit, disabled: !ready }, t('addRoot.add')),
+            ],
+          },
+          h(
+            'div',
+            { className: 'dsm-form' },
+            h(
+              'div',
+              { className: 'dsm-col' },
+              h('span', { className: 'dsm-label' }, t('addRoot.label')),
+              h('input', {
+                className: 'dsm-input',
+                value: path,
+                placeholder: t('addRoot.placeholder'),
+                onChange: (event) => setPath(event.target.value),
+                onKeyDown: (event) => {
+                  if (event.key === 'Enter') submit()
+                },
+              }),
+            ),
+            h('div', { className: 'dsm-note' }, t('addRoot.hint')),
+          ),
+        )
+      }
+
       function CreateDialog({ roots, defaultRootKey }) {
         const [rootKey, setRootKey] = React.useState(defaultRootKey)
         const [name, setName] = React.useState('')
@@ -1000,40 +1130,65 @@ window.__ModuleLoader__.load({
       }
 
       /** The install chooser. */
-      function InstallDialog({ roots, defaultRootKey }) {
+      /**
+       * Install a skill into a root DSH scans.
+       *
+       * Two modes: with `source` set, the skill is already on disk (it came
+       * from an added directory) and one click copies it; without it, the
+       * person picks a folder.
+       *
+       * @param props - candidate roots, a default, and an optional source.
+       */
+      function InstallDialog({ roots, defaultRootKey, source }) {
         const [rootKey, setRootKey] = React.useState(defaultRootKey)
+        const copying = source !== undefined
+        const blocked = roots.length === 0
+        const primary = copying
+          ? () => store.installFromRoot(rootKey, source.path, source.name)
+          : () => store.installFromFolder(rootKey)
         return h(
           Dialog,
           {
             title: t('install.title'),
-            subtitle: t('install.subtitle'),
+            subtitle: copying ? source.name : t('install.subtitle'),
             onClose: () => store.setDialog(undefined),
             footer: [
               h(Action, { key: 'cancel', onClick: () => store.setDialog(undefined) }, t('action.cancel')),
-              h(Action, { key: 'pick', variant: 'primary', onClick: () => store.installFromFolder(rootKey) }, t('install.pick')),
+              h(Action, { key: 'pick', variant: 'primary', onClick: primary, disabled: blocked }, copying ? t('action.install') : t('install.pick')),
             ],
           },
           h(
             'div',
             { className: 'dsm-form' },
-            h(
-              'div',
-              { className: 'dsm-col' },
-              h('span', { className: 'dsm-label' }, t('create.root')),
-              h(
-                'select',
-                { className: 'dsm-input', value: rootKey, onChange: (event) => setRootKey(event.target.value) },
-                roots.map((root) => h('option', { key: root.key, value: root.key }, rootLabel(root))),
-              ),
-            ),
-            h('div', { className: 'dsm-note' }, t('install.hint')),
+            copying
+              ? h(
+                  'div',
+                  { className: 'dsm-col' },
+                  h('span', { className: 'dsm-label' }, t('install.source')),
+                  h('span', { className: 'dsm-card-path', title: source.path }, source.path),
+                )
+              : null,
+            blocked
+              ? null
+              : h(
+                  'div',
+                  { className: 'dsm-col' },
+                  h('span', { className: 'dsm-label' }, t('create.root')),
+                  h(
+                    'select',
+                    { className: 'dsm-input', value: rootKey, onChange: (event) => setRootKey(event.target.value) },
+                    roots.map((root) => h('option', { key: root.key, value: root.key }, rootLabel(root))),
+                  ),
+                ),
+            h('div', { className: 'dsm-note' }, blocked ? t('install.noTarget') : t('install.hint')),
           ),
         )
       }
 
       /** One skill row. */
-      function SkillRow({ rootKey, skill }) {
+      function SkillRow({ rootKey, skill, readOnly }) {
         const issues = skill.issues ?? []
+        const copyable = readOnly && skill.entryKind === 'directory'
         return h(
           'div',
           { className: 'dsm-row' },
@@ -1053,13 +1208,30 @@ window.__ModuleLoader__.load({
           h(
             'div',
             { className: 'dsm-row-actions' },
-            h(Toggle, {
-              checked: !skill.disabled,
-              label: skill.disabled ? t('status.disabled') : t('status.enabled'),
-              onChange: (next) => store.setDisabled(rootKey, skill, !next),
-            }),
+            // An added directory is not scanned by DSH, so a switch there would
+            // change nothing. Offer the one operation that does: copy it out.
+            copyable
+              ? h(
+                  Action,
+                  {
+                    variant: 'quiet',
+                    onClick: () => store.setDialog({ kind: 'install', source: { path: skill.path, name: skill.name } }),
+                    title: t('action.installTo'),
+                  },
+                  t('action.installTo'),
+                )
+              : null,
+            readOnly
+              ? null
+              : h(Toggle, {
+                  checked: !skill.disabled,
+                  label: skill.disabled ? t('status.disabled') : t('status.enabled'),
+                  onChange: (next) => store.setDisabled(rootKey, skill, !next),
+                }),
             h(Action, { variant: 'quiet', onClick: () => store.reveal(rootKey, skill.entryName), title: t('action.reveal') }, t('action.revealShort')),
-            h(Action, { variant: 'quiet', onClick: () => store.uninstall(rootKey, skill), title: t('action.uninstall') }, t('action.uninstallShort')),
+            readOnly
+              ? null
+              : h(Action, { variant: 'quiet', onClick: () => store.uninstall(rootKey, skill), title: t('action.uninstall') }, t('action.uninstallShort')),
           ),
         )
       }
@@ -1091,6 +1263,7 @@ window.__ModuleLoader__.load({
         const visible = filtered.slice(0, RENDER_LIMIT)
         const hidden = filtered.length - visible.length
         const trash = root.trash ?? []
+        const readOnly = root.readOnly === true
         return h(
           'section',
           { className: 'dsm-card' },
@@ -1100,10 +1273,11 @@ window.__ModuleLoader__.load({
             h(
               'div',
               { className: 'dsm-card-title' },
-              h('span', { className: 'dsm-card-name' }, rootLabel(root)),
+              h('span', { className: 'dsm-card-name' }, rootLabel(root), readOnly ? h(Chip, { tone: 'muted' }, t('chip.readOnly')) : null),
               h('span', { className: 'dsm-card-path', title: root.path }, root.path),
             ),
             h(Action, { onClick: () => store.reveal(root.key, undefined) }, t('action.revealFolder')),
+            readOnly ? h(Action, { variant: 'quiet', danger: true, onClick: () => store.removeRoot(root) }, t('action.remove')) : null,
           ),
           visible.length === 0
             ? h(
@@ -1111,9 +1285,9 @@ window.__ModuleLoader__.load({
                 { className: 'dsm-empty' },
                 h('span', { className: 'dsm-empty-body' }, query.length > 0 ? t('empty.noMatch') : root.exists ? t('empty.rootEmpty') : t('empty.rootMissing')),
               )
-            : visible.map((skill) => h(SkillRow, { key: `${root.key}:${skill.entryName}`, rootKey: root.key, skill })),
+            : visible.map((skill) => h(SkillRow, { key: `${root.key}:${skill.entryName}`, rootKey: root.key, skill, readOnly })),
           hidden > 0 ? h('div', { className: 'dsm-note' }, fill(t('list.limit'), { count: RENDER_LIMIT })) : null,
-          trash.length > 0
+          !readOnly && trash.length > 0
             ? h(
                 'div',
                 { className: 'dsm-card-head', style: { borderTop: '0.5px solid var(--dsw-alias-border-l1)' } },
@@ -1121,7 +1295,7 @@ window.__ModuleLoader__.load({
                 h(Action, { variant: 'quiet', onClick: () => store.emptyTrash(root.key) }, t('action.emptyTrash')),
               )
             : null,
-          trash.map((entry) => h(TrashRow, { key: `${root.key}:trash:${entry.entryName}`, rootKey: root.key, entry })),
+          readOnly ? null : trash.map((entry) => h(TrashRow, { key: `${root.key}:trash:${entry.entryName}`, rootKey: root.key, entry })),
         )
       }
 
@@ -1232,7 +1406,9 @@ window.__ModuleLoader__.load({
         const total = roots.reduce((sum, root) => sum + (root.skills?.length ?? 0), 0)
         const enabled = roots.reduce((sum, root) => sum + (root.skills ?? []).filter((skill) => !skill.disabled).length, 0)
         const defaultRoot = state.rootFilter ?? roots[0]?.key
-        const manageable = roots.filter((root) => root.kind === 'user' || root.exists)
+        // A target must be writable: DSH would not scan an added directory, and
+        // the Host refuses to change one anyway.
+        const manageable = roots.filter((root) => root.readOnly !== true && (root.kind === 'user' || root.exists))
         const warnings = state.data?.warnings ?? []
 
         return h(
@@ -1262,6 +1438,7 @@ window.__ModuleLoader__.load({
             ),
             h(Action, { variant: 'primary', onClick: () => store.setDialog({ kind: 'create' }) }, t('action.create')),
             h(Action, { onClick: () => store.setDialog({ kind: 'install' }) }, t('action.install')),
+            h(Action, { onClick: () => store.setDialog({ kind: 'add-root' }) }, t('action.addRoot')),
             h(
               Action,
               {
@@ -1328,7 +1505,10 @@ window.__ModuleLoader__.load({
           ),
           state.detail ? h(DetailDialog, { detail: state.detail }) : null,
           state.dialog?.kind === 'create' && manageable.length > 0 ? h(CreateDialog, { roots: manageable, defaultRootKey: defaultRoot }) : null,
-          state.dialog?.kind === 'install' && manageable.length > 0 ? h(InstallDialog, { roots: manageable, defaultRootKey: defaultRoot }) : null,
+          state.dialog?.kind === 'add-root' ? h(AddRootDialog, null) : null,
+          state.dialog?.kind === 'install'
+            ? h(InstallDialog, { roots: manageable, defaultRootKey: defaultRoot, source: state.dialog.source })
+            : null,
         )
       }
 

@@ -24,6 +24,7 @@ DSH 会从用户目录和项目目录下的 `.dsh/skills`、`.agents/skills` 中
 | **新建技能** | 用表单写一个带合法 frontmatter 的技能包。 |
 | **安全卸载** | 卸载只是把条目移进根目录下的 `.trash`，之后可恢复，也可彻底删除。 |
 | **定位** | 在访达 / 资源管理器 / 桌面文件管理器中显示技能或根目录。 |
+| **添加目录** | 把另一个 agent 的技能库挂到面板上——`~/.claude/skills`、同事的仓库、外置硬盘上的备份都行。添加的目录是只读的，随时可以从列表里移除。 |
 
 ## 安装
 
@@ -58,7 +59,8 @@ bundle patch 会插入一个名为 `skills` 的 Loader 行；客户端部分负�
 
 **宿主侧**（`index.js`）在 `ctx.connection.fetch` 上注册一个需要鉴权的 JSON 路由
 `POST /api/dsh-skills`，处理 `list`、`read`、`set-disabled`、`trash`、`restore`、
-`purge`、`empty-trash`、`create`、`import-directory`、`import-files`、`reveal`。
+`purge`、`empty-trash`、`create`、`import-directory`、`import-files`、`reveal`、
+`add-root`、`remove-root`。
 `lib/skills-core.js` 负责技能语法本身——frontmatter 解析、根目录发现、条目扫描——
 路由和测试因此共用同一套「什么算一个技能」的定义。
 
@@ -71,6 +73,20 @@ bundle patch 会插入一个名为 `skills` 的 Loader 行；客户端部分负�
 DSH 只发现技能根的**直接子项**。被停用的技能会被移到 `<root>/.disabled/<name>`——
 隐藏、因此对所有 provider 不可见——重新启用时原样移回。`SKILL.md` 一个字节都不会被改写，
 手写的技能可以完整往返。`.trash` 用的是同一套办法。
+
+### 添加的目录
+
+DSH 只扫描那四个根目录，所以「添加目录」并不会让 DSH 加载它。它做的是把另一个
+agent 的技能库摆到你面前：面板列出其中的技能、可以预览、也可以复制一份到 DSH
+真正会扫描的根目录里。
+
+既然在那里拨开关不会有任何效果，添加的根目录一律**只读**：没有启用/停用、没有
+卸载、不能在里面新建，也不会被当作安装目标。这条规则在宿主侧同样强制执行
+（`code: 'read-only'`），不依赖页面自觉。
+
+列表存在 `$DSH_HOME/skills-roots.json`——放在技能旁边而不是 profile 里，这样重建
+profile 不会丢，Web 端和桌面端也共用同一份。文件损坏时按空列表处理，下一次
+「添加目录」会把它重写。
 
 ### 边界
 
@@ -109,5 +125,6 @@ frontmatter 解析（引号标量、注释、块标量、非法布尔写法）�
 
 - `import-files` 以文本传输，不携带二进制文件；需要资源文件时用 `import-directory`，
   或安装后再把资源复制进技能包。
-- 不在 DSH 扫描的四个根目录内的技能不会列出——DSH 本身也不会加载它。
+- 不在 DSH 扫描的四个根目录内的技能，DSH 本身不会加载。添加的目录只用于浏览和
+  复制；「安装」是把技能复制进 DSH 会扫描的根目录，之后磁盘上就有两份。
 - 面板显示的是根目录当前的状态，不监听文件系统；在磁盘上改过文件后请点「刷新」。
