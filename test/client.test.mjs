@@ -809,6 +809,50 @@ test('GitHub import offers multi-select and imports the selected skills together
   assert.match(app.text(), /已从 owner\/repo 导入 2 个技能/)
 })
 
+test('a read-only filter never preselects a root the import cannot write', async () => {
+  const locked = { key: 'custom:locked', kind: 'custom', source: 'custom', agent: 'codex', path: '/home/u/.codex/skills', exists: true, readOnly: true, skills: [], trash: [] }
+  const writable = { key: 'user-dsh', kind: 'user', source: 'user-dsh', path: '/home/u/.dsh/skills', exists: true, skills: [], trash: [] }
+  const app = mountClient({ roots: [locked, writable] })
+  await app.settle()
+
+  // Filter the page to the read-only library, then open the GitHub dialog.
+  // Tabs are: all roots, then one per root, in listing order.
+  const tabs = elementsOf(app.render()).filter((element) => element.props?.className === 'dsm-root-tab')
+  assert.equal(tabs.length, 3, 'the toolbar lists both roots')
+  tabs[1].props.onClick()
+  app.render()
+  app.buttons().find((entry) => entry.text === '从 GitHub 导入').props.onClick()
+
+  const select = elementsOf(app.render()).find((element) => element.type === 'select' && element.props?.className === 'dsm-input')
+  assert.ok(select, 'the dialog offers a target root')
+  assert.equal(select.props.value, 'user-dsh', 'it defaults to the writable root, not the filtered read-only one')
+})
+
+test('the target root cannot change while a scan is in flight', async () => {
+  const root = { key: 'user-dsh', kind: 'user', source: 'user-dsh', path: '/home/u/.dsh/skills', exists: true, skills: [], trash: [] }
+  const app = mountClient({ roots: [root] })
+  await app.settle()
+  app.buttons().find((entry) => entry.text === '从 GitHub 导入').props.onClick()
+
+  const link = elementsOf(app.render()).find((element) => element.type === 'input' && element.props?.className === 'dsm-input' && element.props.type !== 'password')
+  link.props.onChange({ target: { value: 'https://github.com/owner/repo' } })
+
+  let release
+  const held = new Promise((resolve) => { release = resolve })
+  globalThis.fetch = async () => {
+    await held
+    return { status: 200, json: async () => ({ ok: false, code: 'not-a-skill', message: 'nothing there' }) }
+  }
+
+  const scan = app.buttons().find((entry) => entry.text === '扫描 GitHub')
+  const pending = scan.props.onClick()
+  const select = elementsOf(app.render()).find((element) => element.type === 'select' && element.props?.className === 'dsm-input')
+  assert.equal(select.props.disabled, true, 'the root is locked while the request owns it')
+  release()
+  await pending
+  await app.settle()
+})
+
 test('a token is only sent when one was typed', async () => {
   const root = { key: 'user-dsh', kind: 'user', source: 'user-dsh', path: '/home/u/.dsh/skills', exists: true, skills: [], trash: [] }
   const app = mountClient({ roots: [root] })

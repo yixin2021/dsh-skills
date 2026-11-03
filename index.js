@@ -557,6 +557,17 @@ function sourceLink(spec, ref, path) {
 }
 
 /**
+ * Normalize an entry name for the file-system collision rules used by the
+ * platforms this plugin supports. Linux remains case-sensitive; macOS and
+ * Windows are not, so `Foo` and `foo` cannot be two batch destinations.
+ * @param name - the candidate directory name.
+ * @returns the comparison key.
+ */
+function entryNameKey(name) {
+  return process.platform === 'darwin' || process.platform === 'win32' ? name.normalize('NFKC').toLocaleLowerCase('en-US') : name
+}
+
+/**
  * Install a skill straight out of a remote repository.
  *
  * One read fetches the repository — an archive for GitHub, a shallow clone for
@@ -652,10 +663,11 @@ async function installFromRemote(ctx, request) {
     if (name === undefined) {
       return { ok: false, code: 'bad-name', message: `"${candidate.name}" is not a name DSH can use as a directory.` }
     }
-    if (names.has(name)) {
+    const key = entryNameKey(name)
+    if (names.has(key)) {
       return { ok: false, code: 'conflict', message: `Several selected skills would be installed as "${name}".` }
     }
-    names.add(name)
+    names.add(key)
 
     const locations = entryLocations(root.path, name)
     const taken = await firstExisting([locations.enabled, locations.disabled, join(root.path, TRASH_DIR, name)])

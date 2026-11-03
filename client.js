@@ -1363,7 +1363,15 @@ window.__ModuleLoader__.load({
       function RemoteInstallDialog({ roots, defaultRootKey, dialog, busy }) {
         const [url, setUrl] = React.useState(dialog.url ?? '')
         const [token, setToken] = React.useState(dialog.token ?? '')
-        const [rootKey, setRootKey] = React.useState(dialog.rootKey ?? defaultRootKey)
+        const [rootKey, setRootKey] = React.useState(
+          // A remembered root may be read-only (the filter pointed at an agent
+          // library). Never preselect something this dialog cannot write to.
+          roots.some((root) => root.key === dialog.rootKey)
+            ? dialog.rootKey
+            : roots.some((root) => root.key === defaultRootKey)
+              ? defaultRootKey
+              : roots[0]?.key,
+        )
         const candidates = Array.isArray(dialog.candidates) ? dialog.candidates : []
         const selectedPaths = Array.isArray(dialog.selectedPaths) ? dialog.selectedPaths : []
         const blocked = roots.length === 0
@@ -1372,6 +1380,8 @@ window.__ModuleLoader__.load({
           const next = checked
             ? [...new Set([...selectedPaths, path])]
             : selectedPaths.filter((selected) => selected !== path)
+          // The dialog is remounted with a fresh `candidates` prop after a
+          // scan, so the batch selection must also travel through the store.
           store.setDialog({ ...dialog, rootKey, selectedPaths: next })
         }
         const submit = (paths) => {
@@ -1448,7 +1458,7 @@ window.__ModuleLoader__.load({
                   h('span', { className: 'dsm-label' }, t('remote.root')),
                   h(
                     'select',
-                    { className: 'dsm-input', value: rootKey, onChange: (event) => setRootKey(event.target.value) },
+                    { className: 'dsm-input', value: rootKey, disabled: busy, onChange: (event) => setRootKey(event.target.value) },
                     roots.map((root) => h('option', { key: root.key, value: root.key }, rootLabel(root))),
                   ),
                 ),
@@ -1736,10 +1746,13 @@ window.__ModuleLoader__.load({
         const visibleRoots = state.rootFilter === undefined ? roots : roots.filter((root) => root.key === state.rootFilter)
         const total = roots.reduce((sum, root) => sum + (root.skills?.length ?? 0), 0)
         const enabled = roots.reduce((sum, root) => sum + (root.skills ?? []).filter((skill) => !skill.disabled).length, 0)
-        const defaultRoot = state.rootFilter ?? roots[0]?.key
         // A target must be writable: DSH would not scan an added directory, and
         // the Host refuses to change one anyway.
         const manageable = roots.filter((root) => root.readOnly !== true && (root.kind === 'user' || root.exists))
+        // The filter may point at a read-only library, which cannot be a target.
+        // Falling back to the first writable root keeps the dialogs usable
+        // instead of preselecting a root the Host will refuse.
+        const defaultRoot = manageable.some((root) => root.key === state.rootFilter) ? state.rootFilter : manageable[0]?.key
         const warnings = state.data?.warnings ?? []
 
         return h(

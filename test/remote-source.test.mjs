@@ -20,7 +20,7 @@ import { after, before, describe, test } from 'node:test'
 import { dispatch } from '../index.js'
 import { parseGitUrl } from '../lib/git-source.js'
 import { parseRemoteUrl, readRemoteTree, clearTreeCache } from '../lib/remote-source.js'
-import { collectSkillFiles, collectSkillFilesDetailed, findSkillCandidates, safeSegments } from '../lib/skill-tree.js'
+import { collectSkillFiles, collectSkillFilesDetailed, findSkillCandidates, readTreeFromDisk, safeSegments } from '../lib/skill-tree.js'
 
 /**
  * One ustar header block.
@@ -234,6 +234,33 @@ describe('the tree policy', () => {
   })
 })
 
+describe('the disk tree reader', () => {
+  test('a byte-limit breach stops every directory, not just the current one', async () => {
+    const base = await mkdtemp(join(tmpdir(), 'dsh-skills-tree-'))
+    try {
+      // Three sibling directories, each with one 1 KiB payload: a reader that
+      // only aborts the current recursion would keep going after the first.
+      for (const name of ['aa', 'bb', 'cc']) {
+        await mkdir(join(base, name), { recursive: true })
+        await writeFile(join(base, name, 'payload.bin'), Buffer.alloc(1024, 0x61))
+      }
+      const reads = []
+      const files = await readTreeFromDisk(base, {
+        maxBytes: 1500,
+        readFileImpl: async (path) => {
+          reads.push(path)
+          return readFile(path)
+        },
+      })
+      assert.equal(reads.length, 2, 'the third sibling is never read once the budget is spent')
+      assert.equal(files.size, 1, 'only files that fit under the limit are kept')
+      assert.ok(files.has('aa/payload.bin'))
+    } finally {
+      await rm(base, { recursive: true, force: true })
+    }
+  })
+})
+
 describe('installing from a repository', () => {
   let base
   let project
@@ -418,6 +445,24 @@ describe('installing from a repository', () => {
     const imported = await dispatch(ctx, { ...request, paths: ['collection/one', 'collection/two'] })
     assert.equal(imported.ok, true)
     assert.equal(imported.entries.length, 2)
+  })
+
+  test('names that collide only on a case-insensitive disk are refused in preflight', async () => {
+    const { impl } = archiveFetch({
+      'x/SKILL.md': '---\nname: Foo\ndescription: Upper.\n---\n',
+      'y/SKILL.md': '---\nname: foo\ndescription: Lower.\n---\n',
+    })
+    const answer = await dispatch(ctx, {
+      action: 'install-from-remote', rootKey: rootKey(),
+      url: 'https://github.com/owner/case-collision', paths: ['x', 'y'], fetchImpl: impl,
+    })
+    if (process.platform === 'darwin' || process.platform === 'win32') {
+      assert.equal(answer.code, 'conflict', JSON.stringify(answer))
+    } else {
+      assert.equal(answer.ok, true, JSON.stringify(answer))
+      await rm(join(project, '.dsh', 'skills', 'Foo'), { recursive: true, force: true })
+      await rm(join(project, '.dsh', 'skills', 'foo'), { recursive: true, force: true })
+    }
   })
 
   test('the chosen skill arrives with the files it references', async () => {
