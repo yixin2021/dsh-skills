@@ -642,14 +642,13 @@ test('the list scrollbar follows the scroll and fades out when it stops', async 
   assert.equal(app.thumb().props['data-on'], 'false', 'a list that fits draws no thumb')
 })
 
-test('an added directory is browsable, removable, and offers no switch', async () => {
+test('an added directory is browsable, removable, and switchable', async () => {
   const added = {
     key: 'custom:0badc0de',
     kind: 'custom',
     source: 'custom',
     path: '/home/u/.claude/skills',
     exists: true,
-    readOnly: true,
     skills: [
       { name: 'alpha', entryName: 'alpha', entryKind: 'directory', description: 'Alpha.', disabled: false, modelInvocable: true, userInvocable: true, issues: [], path: '/home/u/.claude/skills/alpha' },
     ],
@@ -661,15 +660,15 @@ test('an added directory is browsable, removable, and offers no switch', async (
   const labels = app.buttons().map((entry) => entry.text)
   assert.ok(labels.includes('添加目录'), 'the toolbar offers to add a directory')
   assert.ok(labels.includes('移除'), 'the card offers to forget it')
-  assert.ok(labels.includes('安装…'), 'a skill can be copied out of it')
-  assert.ok(!labels.includes('卸载'), 'a skill in it cannot be uninstalled')
-  // The read-only card must not present a destructive switch either.
+  assert.ok(labels.includes('安装…'), 'a skill can still be copied out of it')
+  assert.ok(labels.includes('卸载'), 'a skill in it can be uninstalled like any other')
   const text = app.text()
-  assert.match(text, /只读/, 'the card says it is read-only')
+  assert.doesNotMatch(text, /只读/, 'the card no longer calls the directory read-only')
 
   const tree = app.render()
   const toggles = elementsOf(tree).filter((element) => element.type === 'input' && element.props?.type === 'checkbox')
-  assert.equal(toggles.length, 0, 'no checkbox is rendered for a read-only root')
+  assert.equal(toggles.length, 1, 'the skill carries a real switch')
+  assert.equal(toggles[0].props.checked, true, 'enabled by default')
 
   // Installing from it opens the copy dialog with the source path filled in.
   const install = app.buttons().find((entry) => entry.text === '安装…')
@@ -686,7 +685,6 @@ test('removing an added directory asks the Host once', async () => {
     source: 'custom',
     path: '/home/u/.claude/skills',
     exists: true,
-    readOnly: true,
     skills: [],
     trash: [],
   }
@@ -704,10 +702,10 @@ test('removing an added directory asks the Host once', async () => {
 
 test('an agent library is named after its agent and carries that agent\'s own mark', async () => {
   const roots = [
-    { key: 'agent:codex', kind: 'agent', source: 'custom', agent: 'codex', path: '/home/u/.codex/skills', exists: true, readOnly: true, skills: [], trash: [] },
-    { key: 'agent:claude', kind: 'agent', source: 'custom', agent: 'claude', path: '/home/u/.claude/skills', exists: true, readOnly: true, skills: [], trash: [] },
-    { key: 'agent:workbuddy', kind: 'agent', source: 'custom', agent: 'workbuddy', path: '/home/u/.workbuddy/skills', exists: true, readOnly: true, skills: [], trash: [] },
-    { key: 'custom:0badc0de', kind: 'custom', source: 'custom', agent: 'custom', path: '/home/u/mine', exists: true, readOnly: true, skills: [], trash: [] },
+    { key: 'agent:codex', kind: 'agent', source: 'custom', agent: 'codex', path: '/home/u/.codex/skills', exists: true, skills: [], trash: [] },
+    { key: 'agent:claude', kind: 'agent', source: 'custom', agent: 'claude', path: '/home/u/.claude/skills', exists: true, skills: [], trash: [] },
+    { key: 'agent:workbuddy', kind: 'agent', source: 'custom', agent: 'workbuddy', path: '/home/u/.workbuddy/skills', exists: true, skills: [], trash: [] },
+    { key: 'custom:0badc0de', kind: 'custom', source: 'custom', agent: 'custom', path: '/home/u/mine', exists: true, skills: [], trash: [] },
   ]
   const app = mountClient({ roots })
   await app.settle()
@@ -809,13 +807,12 @@ test('GitHub import offers multi-select and imports the selected skills together
   assert.match(app.text(), /已从 owner\/repo 导入 2 个技能/)
 })
 
-test('a read-only filter never preselects a root the import cannot write', async () => {
-  const locked = { key: 'custom:locked', kind: 'custom', source: 'custom', agent: 'codex', path: '/home/u/.codex/skills', exists: true, readOnly: true, skills: [], trash: [] }
-  const writable = { key: 'user-dsh', kind: 'user', source: 'user-dsh', path: '/home/u/.dsh/skills', exists: true, skills: [], trash: [] }
-  const app = mountClient({ roots: [locked, writable] })
+test('the filtered root is the one an import targets by default', async () => {
+  const added = { key: 'custom:locked', kind: 'custom', source: 'custom', agent: 'codex', path: '/home/u/.codex/skills', exists: true, skills: [], trash: [] }
+  const own = { key: 'user-dsh', kind: 'user', source: 'user-dsh', path: '/home/u/.dsh/skills', exists: true, skills: [], trash: [] }
+  const app = mountClient({ roots: [added, own] })
   await app.settle()
 
-  // Filter the page to the read-only library, then open the GitHub dialog.
   // Tabs are: all roots, then one per root, in listing order.
   const tabs = elementsOf(app.render()).filter((element) => element.props?.className === 'dsm-root-tab')
   assert.equal(tabs.length, 3, 'the toolbar lists both roots')
@@ -825,7 +822,7 @@ test('a read-only filter never preselects a root the import cannot write', async
 
   const select = elementsOf(app.render()).find((element) => element.type === 'select' && element.props?.className === 'dsm-input')
   assert.ok(select, 'the dialog offers a target root')
-  assert.equal(select.props.value, 'user-dsh', 'it defaults to the writable root, not the filtered read-only one')
+  assert.equal(select.props.value, 'custom:locked', 'it defaults to the root the page is filtered to')
 })
 
 test('the target root cannot change while a scan is in flight', async () => {

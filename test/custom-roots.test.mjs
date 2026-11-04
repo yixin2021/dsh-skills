@@ -19,6 +19,11 @@ import { apply, dispatch } from '../index.js'
 const SKILL = '---\nname: alpha\ndescription: Does the alpha thing.\n---\n\n# Alpha\n'
 const OTHER = '---\nname: beta\ndescription: Does the beta thing.\n---\n\n# Beta\n'
 
+/** The visible entries of a directory: the hidden bookkeeping is not a skill. */
+function named(entries) {
+  return entries.filter((entry) => !entry.startsWith('.')).sort()
+}
+
 /** A Host context with no workspaces. */
 const ctx = { get: () => undefined }
 
@@ -71,7 +76,7 @@ describe('added directories', () => {
     assert.equal(duplicate.code, 'duplicate')
   })
 
-  test('lists an added directory as read-only with its skills', async () => {
+  test('lists an added directory with its skills', async () => {
     const added = await dispatch(ctx, { action: 'add-root', path: library })
     assert.equal(added.ok, true)
     assert.match(added.key, /^custom:[0-9a-f]{8}$/)
@@ -80,31 +85,44 @@ describe('added directories', () => {
     const root = listed.roots.find((entry) => entry.path === library)
     assert.ok(root, 'the directory is listed')
     assert.equal(root.kind, 'custom')
-    assert.equal(root.readOnly, true)
+    assert.equal(root.readOnly, undefined, 'an added directory is managed like any other root')
     assert.deepEqual(root.skills.map((skill) => skill.name), ['alpha'])
     // The managed DSH roots are still there, unchanged.
     assert.ok(listed.roots.some((entry) => entry.key === 'user-dsh'))
   })
 
-  test('refuses to change anything inside an added directory', async () => {
+  test('manages an added directory like any other root', async () => {
     const listed = await dispatch(ctx, { action: 'list' })
     const root = listed.roots.find((entry) => entry.path === library)
 
+    // Disabling hides the entry and leaves its bytes untouched.
     const disable = await dispatch(ctx, { action: 'set-disabled', rootKey: root.key, entryName: 'alpha', disabled: true })
-    assert.equal(disable.ok, false)
-    assert.equal(disable.code, 'read-only')
+    assert.equal(disable.ok, true)
+    assert.deepEqual(await readdir(library), ['.disabled'])
+    assert.match(await readFile(join(library, '.disabled', 'alpha', 'SKILL.md'), 'utf8'), /^---\nname: alpha\n/m)
 
-    const trash = await dispatch(ctx, { action: 'trash', rootKey: root.key, entryName: 'alpha' })
-    assert.equal(trash.ok, false)
-    assert.equal(trash.code, 'read-only')
+    const enable = await dispatch(ctx, { action: 'set-disabled', rootKey: root.key, entryName: 'alpha', disabled: false })
+    assert.equal(enable.ok, true)
+    assert.deepEqual((await readdir(library)).sort(), ['.disabled', 'alpha'])
 
-    const create = await dispatch(ctx, { action: 'create', rootKey: root.key, name: 'gamma', description: 'x' })
-    assert.equal(create.ok, false)
-    assert.equal(create.code, 'read-only')
+    // Creating a skill spends the same write access the switch uses.
+    const create = await dispatch(ctx, { action: 'create', rootKey: root.key, name: 'gamma', description: 'Made in another agent\'s library.' })
+    assert.equal(create.ok, true)
+    assert.deepEqual(named(await readdir(library)), ['alpha', 'gamma'])
 
-    // The other agent's library is byte-for-byte as it was.
-    assert.deepEqual(await readdir(library), ['alpha'])
-    assert.match(await readFile(join(library, 'alpha', 'SKILL.md'), 'utf8'), /^---\nname: alpha\n/m)
+    // Uninstall is reversible there too.
+    const trash = await dispatch(ctx, { action: 'trash', rootKey: root.key, entryName: 'gamma' })
+    assert.equal(trash.ok, true)
+    assert.deepEqual(await readdir(join(library, '.trash')), ['gamma'])
+    const restore = await dispatch(ctx, { action: 'restore', rootKey: root.key, entryName: 'gamma' })
+    assert.equal(restore.ok, true)
+    assert.deepEqual(named(await readdir(library)), ['alpha', 'gamma'])
+
+    // Leave the library as the next tests expect to find it.
+    assert.equal((await dispatch(ctx, { action: 'trash', rootKey: root.key, entryName: 'gamma' })).ok, true)
+    assert.equal((await dispatch(ctx, { action: 'purge', rootKey: root.key, entryName: 'gamma' })).ok, true)
+    const after = await dispatch(ctx, { action: 'list' })
+    assert.deepEqual(after.roots.find((entry) => entry.path === library).skills.map((entry) => entry.name), ['alpha'])
   })
 
   test('copies a skill out of an added directory into one DSH scans', async () => {
@@ -120,7 +138,7 @@ describe('added directories', () => {
     const userRoot = after.roots.find((entry) => entry.key === 'user-dsh')
     assert.deepEqual(userRoot.skills.map((entry) => entry.name), ['alpha'])
     // Copied, not moved: the source library keeps its skill.
-    assert.deepEqual(await readdir(library), ['alpha'])
+    assert.deepEqual(named(await readdir(library)), ['alpha'])
   })
 
   test('keys follow the directory, not its position', async () => {
@@ -236,5 +254,17 @@ test('DSH itself can load skills from an added directory', async () => {
   assert.equal(invalidations.length, 2, 'removing a directory refreshes the catalog')
   const after = await provider.list()
   assert.deepEqual(after.candidates.map((candidate) => candidate.name), ['beta'])
+
+  // A switch inside a directory this plugin serves has to drop the cached
+  // catalog as well: nothing watches that directory, so no one else will.
+  const served = (await dispatch(ctx, { action: 'list' })).roots.find((entry) => entry.path === second)
+  const toggled = await dispatch(ctx, { action: 'set-disabled', rootKey: served.key, entryName: 'beta', disabled: true })
+  assert.equal(toggled.ok, true)
+  assert.equal(invalidations.length, 3, 'a mutation in a served directory refreshes the catalog')
+  assert.deepEqual((await provider.list()).candidates, [], 'the disabled skill is gone from the catalog')
+
+  const back = await dispatch(ctx, { action: 'set-disabled', rootKey: served.key, entryName: 'beta', disabled: false })
+  assert.equal(back.ok, true)
+  assert.deepEqual((await provider.list()).candidates.map((candidate) => candidate.name), ['beta'])
 })
 })

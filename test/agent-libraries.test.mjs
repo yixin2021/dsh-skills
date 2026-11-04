@@ -9,7 +9,7 @@
  */
 
 import assert from 'node:assert/strict'
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { after, before, describe, test } from 'node:test'
@@ -61,7 +61,7 @@ describe('agent libraries', () => {
     assert.deepEqual(agents.map((root) => root.agent), ['codex', 'claude', 'workbuddy', 'codebuddy'])
     assert.deepEqual(agents.map((root) => root.skills.map((skill) => skill.name)), [['codex-skill'], ['claude-skill'], ['wb-skill'], ['buddy-skill']])
     for (const root of agents) {
-      assert.equal(root.readOnly, true, 'another agent owns those bytes')
+      assert.equal(root.readOnly, undefined, 'a discovered library is managed like any other root')
       assert.equal(root.exists, true)
       assert.match(root.key, /^agent:/)
     }
@@ -93,6 +93,22 @@ describe('agent libraries', () => {
     // Put it back for the tests that follow.
     await mkdir(join(process.env.CODEBUDDY_HOME, 'skills', 'buddy-skill'), { recursive: true })
     await writeFile(join(process.env.CODEBUDDY_HOME, 'skills', 'buddy-skill', 'SKILL.md'), SKILL.replace('%NAME%', 'buddy-skill'), 'utf8')
+  })
+
+  test('a skill in an agent library is switched in place, not copied', async () => {
+    const listed = await dispatch(ctx, { action: 'list' })
+    const codex = listed.roots.find((root) => root.key === 'agent:codex')
+    const library = join(process.env.CODEX_HOME, 'skills')
+
+    const disabled = await dispatch(ctx, { action: 'set-disabled', rootKey: codex.key, entryName: 'codex-skill', disabled: true })
+    assert.equal(disabled.ok, true)
+    assert.deepEqual(await readdir(library), ['.disabled'])
+    assert.deepEqual(await readdir(join(library, '.disabled')), ['codex-skill'])
+
+    const enabled = await dispatch(ctx, { action: 'set-disabled', rootKey: codex.key, entryName: 'codex-skill', disabled: false })
+    assert.equal(enabled.ok, true)
+    // `.disabled` stays behind so the next disable is a rename, not a create.
+    assert.deepEqual((await readdir(library)).sort(), ['.disabled', 'codex-skill'])
   })
 
   test('adding a discovered directory by hand is refused instead of doubled', async () => {

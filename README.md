@@ -31,7 +31,7 @@ for turning one off without editing files. This plugin adds that surface.
 | **Uninstall safely** | Uninstall moves the entry to a root-local `.trash`; restore it later, or delete it for good. |
 | **Locate** | Reveal a skill or a root in Finder / Explorer / the desktop file manager. |
 | **Known libraries** | Codex, Claude Code, WorkBuddy and CodeBuddy keep their skills in well-known places; those that exist are listed automatically, each with that agent's mark. |
-| **Add a directory** | Point the panel at another agent's skill library — `~/.claude/skills`, a colleague's checkout, a shared bundle. Its skills are listed, and DSH loads them too. The directory itself stays read-only. |
+| **Add a directory** | Point the panel at another agent's skill library — `~/.claude/skills`, a colleague's checkout, a shared bundle. Its skills are listed, managed in place, and loaded by DSH too. |
 
 ## Install
 
@@ -154,8 +154,10 @@ coding agent needs no configuration. This is the order the page lists them in:
 
 Discovery runs on every read rather than being remembered, so installing
 another agent later just works, and deleting a library removes it from the
-list. These libraries are read-only for the same reason added directories are:
-DSH does not own those bytes.
+list. They are managed like DSH's own roots: the plugin is the provider that
+hands them to the model, so the switch changes the catalog the next step reads.
+The bytes still belong to that agent, and uninstalling only moves them into that
+library's own `.trash`, where they can be restored.
 
 The marks are the vendors' own, taken from published brand assets rather than
 drawn here: the DeepSeek whale (`deepseek.svg` from simple-icons), the OpenAI
@@ -172,14 +174,17 @@ provider (`ctx.skills.registerProvider`) that serves the added directories with
 `source: 'custom'` — the label DSH reserves for exactly this. The model sees
 those skills in its catalog, with the invocation policy from each frontmatter,
 and a symlinked bundle counts as a skill (Claude Code and stow both link rather
-than copy). Adding or removing a directory invalidates the catalog, so the next
-model step sees the change without a restart.
+than copy). Adding or removing a directory, or switching a skill in any root,
+invalidates the catalog, so the next model step sees the change without a
+restart.
 
-The directories themselves stay **read-only** in the panel: no enable/disable,
-no uninstall, no create, and never an install target. DSH does not own those
-bytes, and a switch there would edit another tool's library. "Install…" copies
-a skill into a root DSH does own. The Host refuses mutations with
-`code: 'read-only'`, so the rule does not depend on the page behaving.
+The directories are **managed, not just browsed**: enable/disable, uninstall
+and restore, create, and install targets all work there, because this plugin —
+not DSH — is what hands those skills to the model. That is also the limit of
+the claim: disabling renames a bundle into `<root>/.disabled` and uninstalling
+moves it into `<root>/.trash`, both reversible and both confined to that root.
+"Install…" still copies a skill into another root, which is how a skill in
+someone else's library becomes DSH's own bytes.
 
 The list lives in `$DSH_HOME/skills-roots.json` — beside the skills rather than
 inside a profile, so it survives a profile rebuild and is shared by the web and
@@ -223,7 +228,7 @@ names, and a symlink inside a repository is skipped rather than followed.
 npm test
 ```
 
-Runs `node --check` on all seven sources, then 90 tests over a real temporary
+Runs `node --check` on all seven sources, then 104 tests over a real temporary
 tree and over fixtures built in the test itself: frontmatter parsing (quoted
 scalars, comments, block scalars, invalid flag spellings), path containment,
 root discovery, direct-children-only scanning, and every mutation including
@@ -234,8 +239,11 @@ tar reader, and the clone.
 
 - Binaries are not carried by `import-files`, since the route transports text;
   use `import-directory` or copy assets into the bundle afterwards.
-- A skill stored outside the four roots DSH scans is not listed, because DSH
-  would not load it either.
+- Added directories reach the model through this plugin, not through DSH. If a
+  composition has no `skills` service the panel still works, but those skills
+  never enter the model's catalog.
+- Installing a skill out of an added directory leaves two copies on disk; the
+  original is never moved.
 - The panel shows what a root holds now; it does not watch the filesystem, so
   use the reload control after editing files on disk.
 - A remote import needs either `git` on the machine (for every host but

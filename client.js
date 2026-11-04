@@ -82,7 +82,6 @@ window.__ModuleLoader__.load({
       'agent.claude': 'Claude Code',
       'agent.workbuddy': 'WorkBuddy',
       'chip.auto': 'Auto',
-      'chip.readOnly': 'Read only',
       'action.addRoot': 'Add directory',
       'action.remove': 'Remove',
       'action.installTo': 'Install…',
@@ -91,7 +90,7 @@ window.__ModuleLoader__.load({
       'addRoot.label': 'Directory path',
       'addRoot.placeholder': '~/.claude/skills',
       'addRoot.hint':
-        'DSH loads skills from this directory through this plugin. The directory is not DSH-owned, so there is no switch here; use "Install…" to copy a skill into a root DSH owns.',
+        'DSH loads skills from this directory through this plugin, so the switch here changes what the model sees. The bytes still belong to the other tool: uninstalling moves a skill into this directory\'s .trash, where it can be restored.',
       'addRoot.add': 'Add',
       'install.source': 'Source',
       'install.from': 'Copied from {path}',
@@ -206,7 +205,6 @@ window.__ModuleLoader__.load({
       'agent.claude': 'Claude Code',
       'agent.workbuddy': 'WorkBuddy',
       'chip.auto': '自动',
-      'chip.readOnly': '只读',
       'action.addRoot': '添加目录',
       'action.remove': '移除',
       'action.installTo': '安装…',
@@ -215,7 +213,7 @@ window.__ModuleLoader__.load({
       'addRoot.label': '目录路径',
       'addRoot.placeholder': '~/.claude/skills',
       'addRoot.hint':
-        'DSH 会通过本插件加载这里面的技能。目录不归 DSH 管，所以这里没有启用/停用开关；点技能上的「安装…」可复制到 DSH 自己的目录。',
+        'DSH 会通过本插件加载这里面的技能，所以这里的开关确实会改变模型看到的目录。字节仍然属于另一个工具：卸载只是把技能移进该目录的 .trash，随时可以恢复。',
       'addRoot.add': '添加',
       'install.source': '来源',
       'install.from': '来自 {path}',
@@ -1364,8 +1362,8 @@ window.__ModuleLoader__.load({
         const [url, setUrl] = React.useState(dialog.url ?? '')
         const [token, setToken] = React.useState(dialog.token ?? '')
         const [rootKey, setRootKey] = React.useState(
-          // A remembered root may be read-only (the filter pointed at an agent
-          // library). Never preselect something this dialog cannot write to.
+          // A remembered root may have disappeared since. Never preselect a
+          // target the dialog cannot address.
           roots.some((root) => root.key === dialog.rootKey)
             ? dialog.rootKey
             : roots.some((root) => root.key === defaultRootKey)
@@ -1519,9 +1517,11 @@ window.__ModuleLoader__.load({
       }
 
       /** One skill row. */
-      function SkillRow({ rootKey, skill, readOnly }) {
+      function SkillRow({ rootKey, skill, external }) {
         const issues = skill.issues ?? []
-        const copyable = readOnly && skill.entryKind === 'directory'
+        // A skill that lives in another agent's library can also be copied into
+        // a root DSH owns, which is the only way to make it DSH's own bytes.
+        const copyable = external && skill.entryKind === 'directory'
         return h(
           'div',
           { className: 'dsm-row' },
@@ -1541,8 +1541,6 @@ window.__ModuleLoader__.load({
           h(
             'div',
             { className: 'dsm-row-actions' },
-            // An added directory is not scanned by DSH, so a switch there would
-            // change nothing. Offer the one operation that does: copy it out.
             copyable
               ? h(
                   Action,
@@ -1554,17 +1552,13 @@ window.__ModuleLoader__.load({
                   t('action.installTo'),
                 )
               : null,
-            readOnly
-              ? null
-              : h(Toggle, {
-                  checked: !skill.disabled,
-                  label: skill.disabled ? t('status.disabled') : t('status.enabled'),
-                  onChange: (next) => store.setDisabled(rootKey, skill, !next),
-                }),
+            h(Toggle, {
+              checked: !skill.disabled,
+              label: skill.disabled ? t('status.disabled') : t('status.enabled'),
+              onChange: (next) => store.setDisabled(rootKey, skill, !next),
+            }),
             h(Action, { variant: 'quiet', onClick: () => store.reveal(rootKey, skill.entryName), title: t('action.reveal') }, t('action.revealShort')),
-            readOnly
-              ? null
-              : h(Action, { variant: 'quiet', onClick: () => store.uninstall(rootKey, skill), title: t('action.uninstall') }, t('action.uninstallShort')),
+            h(Action, { variant: 'quiet', onClick: () => store.uninstall(rootKey, skill), title: t('action.uninstall') }, t('action.uninstallShort')),
           ),
         )
       }
@@ -1596,7 +1590,9 @@ window.__ModuleLoader__.load({
         const visible = filtered.slice(0, RENDER_LIMIT)
         const hidden = filtered.length - visible.length
         const trash = root.trash ?? []
-        const readOnly = root.readOnly === true
+        // A library another agent keeps: the switch is ours to flip, the bytes
+        // are still that agent's, and the copy action makes them DSH's.
+        const external = root.kind === 'agent' || root.kind === 'custom'
         return h(
           'section',
           { className: 'dsm-card' },
@@ -1613,12 +1609,13 @@ window.__ModuleLoader__.load({
                 rootLabel(root),
                 h('span', { className: 'dsm-root-count' }, root.skills.length),
                 root.kind === 'agent' ? h(Chip, { tone: 'muted' }, t('chip.auto')) : null,
-                readOnly ? h(Chip, { tone: 'muted' }, t('chip.readOnly')) : null,
               ),
               h('span', { className: 'dsm-card-path', title: root.path }, root.path),
             ),
             h(Action, { onClick: () => store.reveal(root.key, undefined) }, t('action.revealFolder')),
-            readOnly ? h(Action, { variant: 'quiet', danger: true, onClick: () => store.removeRoot(root) }, t('action.remove')) : null,
+            root.kind === 'custom'
+              ? h(Action, { variant: 'quiet', danger: true, onClick: () => store.removeRoot(root) }, t('action.remove'))
+              : null,
           ),
           visible.length === 0
             ? h(
@@ -1626,9 +1623,9 @@ window.__ModuleLoader__.load({
                 { className: 'dsm-empty' },
                 h('span', { className: 'dsm-empty-body' }, query.length > 0 ? t('empty.noMatch') : root.exists ? t('empty.rootEmpty') : t('empty.rootMissing')),
               )
-            : visible.map((skill) => h(SkillRow, { key: `${root.key}:${skill.entryName}`, rootKey: root.key, skill, readOnly })),
+            : visible.map((skill) => h(SkillRow, { key: `${root.key}:${skill.entryName}`, rootKey: root.key, skill, external })),
           hidden > 0 ? h('div', { className: 'dsm-note' }, fill(t('list.limit'), { count: RENDER_LIMIT })) : null,
-          !readOnly && trash.length > 0
+          trash.length > 0
             ? h(
                 'div',
                 { className: 'dsm-card-head', style: { borderTop: '0.5px solid var(--dsw-alias-border-l1)' } },
@@ -1636,7 +1633,7 @@ window.__ModuleLoader__.load({
                 h(Action, { variant: 'quiet', onClick: () => store.emptyTrash(root.key) }, t('action.emptyTrash')),
               )
             : null,
-          readOnly ? null : trash.map((entry) => h(TrashRow, { key: `${root.key}:trash:${entry.entryName}`, rootKey: root.key, entry })),
+          trash.map((entry) => h(TrashRow, { key: `${root.key}:trash:${entry.entryName}`, rootKey: root.key, entry })),
         )
       }
 
@@ -1746,12 +1743,13 @@ window.__ModuleLoader__.load({
         const visibleRoots = state.rootFilter === undefined ? roots : roots.filter((root) => root.key === state.rootFilter)
         const total = roots.reduce((sum, root) => sum + (root.skills?.length ?? 0), 0)
         const enabled = roots.reduce((sum, root) => sum + (root.skills ?? []).filter((skill) => !skill.disabled).length, 0)
-        // A target must be writable: DSH would not scan an added directory, and
-        // the Host refuses to change one anyway.
-        const manageable = roots.filter((root) => root.readOnly !== true && (root.kind === 'user' || root.exists))
-        // The filter may point at a read-only library, which cannot be a target.
-        // Falling back to the first writable root keeps the dialogs usable
-        // instead of preselecting a root the Host will refuse.
+        // Every listed root can take an install: the Host writes into another
+        // agent's library and into an added directory exactly as it writes into
+        // DSH's own. Only a root that is on disk no longer is skipped.
+        const manageable = roots.filter((root) => root.kind === 'user' || root.exists)
+        // The filter may point at a directory that has since disappeared.
+        // Falling back to the first usable root keeps the dialogs usable
+        // instead of preselecting a target the Host will refuse.
         const defaultRoot = manageable.some((root) => root.key === state.rootFilter) ? state.rootFilter : manageable[0]?.key
         const warnings = state.data?.warnings ?? []
 

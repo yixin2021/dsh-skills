@@ -533,7 +533,7 @@ describe('installing from a repository', () => {
     assert.equal(answer.code, 'conflict')
   })
 
-  test('a read-only root is refused', async () => {
+  test('a root this plugin does not list is refused', async () => {
     const answer = await dispatch(ctx, {
       action: 'install-from-remote',
       rootKey: 'custom:0badc0de',

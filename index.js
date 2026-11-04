@@ -177,28 +177,20 @@ async function findRoot(ctx, key) {
 /**
  * Resolve a root this plugin is allowed to change.
  *
- * Added directories are read-only on purpose. DSH does not scan them, so
- * enabling or trashing a skill there would change nothing the Harness honours
- * while still editing somebody else's library. Reading and copying out are the
- * operations that make sense, and both stay available.
+ * Every listed root is writable, including the other agents' libraries and the
+ * directories a person added: this plugin serves those to the model through
+ * its own provider, so a switch there really does change the catalog. A write
+ * is still only ever a rename or a create inside one root this plugin resolved
+ * itself.
  *
  * @param ctx - Host context.
  * @param key - a root key from a previous `list`.
- * @returns `{ root }` when writable, `{ error }` with a typed refusal otherwise.
+ * @returns `{ root }` when known, `{ error }` with a typed refusal otherwise.
  */
 async function writableRoot(ctx, key) {
   const root = await findRoot(ctx, key)
   if (root === undefined) {
     return { error: { ok: false, code: 'unknown-root', message: 'That root is not one this plugin manages.' } }
-  }
-  if (root.readOnly === true) {
-    return {
-      error: {
-        ok: false,
-        code: 'read-only',
-        message: `${root.path} was added for reading. Copy the skill into a root DSH scans instead.`,
-      },
-    }
   }
   return { root }
 }
@@ -787,7 +779,8 @@ async function discoverAgentLibraries() {
 
 /**
  * Every root beyond the four DSH scans itself: the discovered agent libraries
- * and the directories a person added. Both are read-only in the same way.
+ * and the directories a person added. Both are managed like the roots above,
+ * because this plugin is the provider that hands them to the model.
  *
  * @returns `{ agent, path }` pairs.
  */
@@ -799,8 +792,9 @@ async function extraRoots() {
 /**
  * Add one directory to the list of extra roots.
  *
- * The directory is shown, never changed: DSH does not scan it, so the page
- * offers copying a skill out of it instead of a switch that would lie.
+ * The directory is listed and managed like any other root: this plugin serves
+ * its skills to the model, so the switch on a skill there is not cosmetic.
+ * Removing the directory from the list never touches the bytes on disk.
  *
  * @param request - `path` as typed by a person.
  * @returns the added directory, or a typed refusal.
@@ -970,7 +964,6 @@ async function listEverything(ctx) {
       workspacePath: root.workspacePath,
       workspaceTitle: root.workspaceTitle,
       exists: scanned.exists,
-      readOnly: root.readOnly === true,
       skills: scanned.skills.map((skill) => ({ ...skill, rootKey: root.key })),
       trash,
     })
@@ -979,7 +972,27 @@ async function listEverything(ctx) {
 }
 
 /**
+ * The actions that change what a provider would list.
+ *
+ * Every one of them ends in a rename or a create inside a root, so the catalog
+ * DSH read a moment ago is stale afterwards. `add-root` and `remove-root`
+ * invalidate on their own, because they change which roots exist at all.
+ */
+const MUTATING_ACTIONS = new Set([
+  'set-disabled',
+  'trash',
+  'restore',
+  'purge',
+  'empty-trash',
+  'create',
+  'import-directory',
+  'import-files',
+  'install-from-remote',
+])
+
+/**
  * Dispatch one request body.
+ *
  * @param ctx - Host context.
  * @param body - the decoded request.
  * @returns the JSON answer.
@@ -987,6 +1000,22 @@ async function listEverything(ctx) {
 export async function dispatch(ctx, body) {
   if (!isRecord(body)) return { ok: false, code: 'bad-request', message: 'The body is not a JSON object.' }
   const request = body
+  const answer = await answerRequest(ctx, request)
+  // DSH's filesystem provider watches the roots it scans itself. The roots this
+  // plugin serves — another agent's library, an added directory — are watched by
+  // nobody, so a successful mutation there must drop the catalog explicitly or
+  // the switch would only take effect after some unrelated change.
+  if (MUTATING_ACTIONS.has(request.action) && answer?.ok === true) skillsControl?.invalidate()
+  return answer
+}
+
+/**
+ * Answer one request.
+ * @param ctx - Host context.
+ * @param request - the decoded request.
+ * @returns the JSON answer.
+ */
+async function answerRequest(ctx, request) {
   switch (request.action) {
     case 'list':
       return listEverything(ctx)
